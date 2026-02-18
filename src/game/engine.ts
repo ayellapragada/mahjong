@@ -15,6 +15,8 @@ import type {
   Meld,
   TurnPhase,
   WindDirection,
+  GameAction,
+  GameActionType,
 } from './types';
 import { isBonusTile, tilesEqual, sortTiles } from './types';
 import { getAvailableCallsForPlayer } from './calls';
@@ -40,6 +42,33 @@ export function generateRoomCode(): string {
     code += chars[Math.floor(Math.random() * chars.length)];
   }
   return code;
+}
+
+// ============================================================================
+// ACTION LOGGING
+// ============================================================================
+
+export function logAction(
+  state: GameState,
+  type: GameActionType,
+  seat: Seat,
+  tile?: TileInstance,
+  fromSeat?: Seat
+): GameState {
+  const player = state.players.find(p => p.seat === seat);
+  const action: GameAction = {
+    type,
+    seat,
+    playerName: player?.name ?? `Seat ${seat}`,
+    tile,
+    fromSeat,
+    timestamp: Date.now(),
+  };
+
+  return {
+    ...state,
+    actionLog: [...state.actionLog, action],
+  };
 }
 
 // ============================================================================
@@ -70,6 +99,7 @@ export function createInitialState(roomCode: string, rulesetId: string): GameSta
     scores: { 0: 0, 1: 0, 2: 0, 3: 0 },
     roundNumber: 1,
     handNumber: 1,
+    actionLog: [],
   };
 }
 
@@ -182,6 +212,7 @@ export function startGame(state: GameState, ruleset: Ruleset): GameState | { err
     },
     lastDiscard: undefined,
     pendingCalls: [],
+    actionLog: [], // Start fresh log
   };
 }
 
@@ -274,6 +305,7 @@ export function startNextRound(state: GameState, ruleset: Ruleset, winnerSeat?: 
     awaitingCallFrom: [],
     roundNumber: newRoundNumber,
     handNumber: newHandNumber,
+    actionLog: [], // Reset log for new round
   };
 }
 
@@ -539,6 +571,9 @@ export function getClientState(state: GameState, playerId: string): ClientGameSt
                  state.turnPhase === 'discarding' &&
                  canDeclareWin(state, ruleset);
 
+  // Get last 20 actions for display
+  const recentActions = state.actionLog.slice(-20);
+
   return {
     phase: state.phase,
     roomCode: state.roomCode,
@@ -561,6 +596,7 @@ export function getClientState(state: GameState, playerId: string): ClientGameSt
     roundNumber: state.roundNumber,
     handNumber: state.handNumber,
     canWin,
+    recentActions,
   };
 }
 
@@ -577,6 +613,9 @@ export function getTableState(state: GameState): Omit<ClientGameState, 'myHand' 
     bonusTiles: p.bonusTiles,
     isDealer: p.isDealer,
   }));
+
+  // Get last 20 actions for display
+  const recentActions = state.actionLog.slice(-20);
 
   return {
     phase: state.phase,
@@ -597,5 +636,6 @@ export function getTableState(state: GameState): Omit<ClientGameState, 'myHand' 
     roundNumber: state.roundNumber,
     handNumber: state.handNumber,
     canWin: false,
+    recentActions,
   };
 }

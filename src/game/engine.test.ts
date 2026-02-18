@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { startNextRound, canDeclareWin } from './engine';
+import { startNextRound, canDeclareWin, discardTile, drawTile } from './engine';
 import type { GameState, TileInstance, Seat, Player } from './types';
 import { hongKongRuleset } from './rulesets/hongkong';
 
@@ -45,6 +45,7 @@ function makeFinishedGameState(overrides: Partial<GameState> = {}): GameState {
     scores: { 0: 100, 1: 50, 2: -50, 3: -100 },
     roundNumber: 1,
     handNumber: 1,
+    actionLog: [],
     ...overrides,
   };
 }
@@ -152,6 +153,7 @@ describe('canDeclareWin', () => {
       scores: { 0: 0, 1: 0, 2: 0, 3: 0 },
       roundNumber: 1,
       handNumber: 1,
+      actionLog: [],
     };
 
     expect(canDeclareWin(state, hongKongRuleset)).toBe(true);
@@ -189,6 +191,7 @@ describe('canDeclareWin', () => {
       scores: { 0: 0, 1: 0, 2: 0, 3: 0 },
       roundNumber: 1,
       handNumber: 1,
+      actionLog: [],
     };
 
     expect(canDeclareWin(state, hongKongRuleset)).toBe(false);
@@ -226,6 +229,7 @@ describe('canDeclareWin', () => {
       scores: { 0: 0, 1: 0, 2: 0, 3: 0 },
       roundNumber: 1,
       handNumber: 1,
+      actionLog: [],
     };
 
     expect(canDeclareWin(state, hongKongRuleset)).toBe(false);

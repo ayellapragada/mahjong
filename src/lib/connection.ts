@@ -4,7 +4,8 @@ export type ViewMode = "player" | "table";
 
 export type ConnectionState =
   | { status: "disconnected" }
-  | { status: "connecting" }
+  | { status: "connecting"; attempt?: number }
+  | { status: "reconnecting"; attempt: number; maxAttempts: number }
   | { status: "connected"; roomCode: string; players: Array<{ name: string; seat: Seat }> }
   | { status: "playing"; state: ClientGameState; gameOver?: { winner: Seat | -1; scores: Record<Seat, number>; breakdown: ScoreBreakdown; winnerName: string; winningHand: TileInstance[]; winningMelds: Meld[]; isSelfDrawn: boolean } };
 
@@ -14,37 +15,81 @@ export type ConnectionStore = {
   connect: (roomId: string, viewMode?: ViewMode) => void;
   disconnect: () => void;
   send: (action: ClientAction) => void;
+  retry: () => void;
 };
 
 export function createConnection(onUpdate: (state: ConnectionState) => void): ConnectionStore {
   let socket: WebSocket | null = null;
   let currentState: ConnectionState = { status: "disconnected" };
   let currentViewMode: ViewMode = "player";
+  let currentRoomId: string | null = null;
+  let reconnectAttempt = 0;
+  let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+  const MAX_RECONNECT_ATTEMPTS = 5;
+  const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 30000];
 
   function setState(newState: ConnectionState) {
     currentState = newState;
     onUpdate(newState);
   }
 
-  function connect(roomId: string, viewMode: ViewMode = "player") {
+  function getReconnectDelay(attempt: number): number {
+    return RECONNECT_DELAYS[Math.min(attempt, RECONNECT_DELAYS.length - 1)];
+  }
+
+  function scheduleReconnect() {
+    if (reconnectAttempt >= MAX_RECONNECT_ATTEMPTS) {
+      setState({ status: "disconnected" });
+      return;
+    }
+
+    const delay = getReconnectDelay(reconnectAttempt);
+    reconnectAttempt++;
+
+    setState({
+      status: "reconnecting",
+      attempt: reconnectAttempt,
+      maxAttempts: MAX_RECONNECT_ATTEMPTS
+    });
+
+    reconnectTimeout = setTimeout(() => {
+      if (currentRoomId) {
+        connectInternal(currentRoomId, currentViewMode, true);
+      }
+    }, delay);
+  }
+
+  function clearReconnect() {
+    if (reconnectTimeout) {
+      clearTimeout(reconnectTimeout);
+      reconnectTimeout = null;
+    }
+  }
+
+  function connectInternal(roomId: string, viewMode: ViewMode, isReconnect: boolean) {
     if (socket) {
       socket.close();
     }
 
     currentViewMode = viewMode;
-    setState({ status: "connecting" });
+    currentRoomId = roomId;
 
-    // partyserver URL pattern: /parties/<class-name>/<room-id>
+    if (!isReconnect) {
+      reconnectAttempt = 0;
+      setState({ status: "connecting" });
+    }
+
     const baseUrl = import.meta.env.DEV
       ? "ws://localhost:8787"
-      : "wss://mahjong.ayellapragada.workers.dev"; // Update after deploy
+      : "wss://mahjong.ayellapragada.workers.dev";
 
-    // Add viewMode as query param so server knows this is a table-only connection
     const wsUrl = `${baseUrl}/parties/mahjong-room/${roomId}?mode=${viewMode}`;
     socket = new WebSocket(wsUrl);
 
     socket.addEventListener("open", () => {
       console.log("Connected to room:", roomId);
+      reconnectAttempt = 0;
+      clearReconnect();
     });
 
     socket.addEventListener("message", (event) => {
@@ -66,7 +111,6 @@ export function createConnection(onUpdate: (state: ConnectionState) => void): Co
           });
           break;
         case "GAME_OVER":
-          // Keep the current state but add gameOver data
           if (currentState.status === "playing") {
             setState({
               ...currentState,
@@ -84,24 +128,34 @@ export function createConnection(onUpdate: (state: ConnectionState) => void): Co
           break;
         case "ERROR":
           console.error("Server error:", message.message);
-          alert(`Error: ${message.message}`);
           break;
       }
     });
 
-    socket.addEventListener("close", () => {
-      console.log("Disconnected");
-      setState({ status: "disconnected" });
+    socket.addEventListener("close", (event) => {
+      console.log("Disconnected", event.code, event.reason);
+
+      // Only auto-reconnect if we were previously connected and it wasn't intentional
+      if (currentRoomId && currentState.status !== "disconnected") {
+        scheduleReconnect();
+      } else {
+        setState({ status: "disconnected" });
+      }
     });
 
     socket.addEventListener("error", (e) => {
       console.error("Connection error:", e);
-      console.error("WebSocket URL:", socket?.url);
-      console.error("ReadyState:", socket?.readyState);
     });
   }
 
+  function connect(roomId: string, viewMode: ViewMode = "player") {
+    clearReconnect();
+    connectInternal(roomId, viewMode, false);
+  }
+
   function disconnect() {
+    clearReconnect();
+    currentRoomId = null;
     if (socket) {
       socket.close();
       socket = null;
@@ -117,11 +171,20 @@ export function createConnection(onUpdate: (state: ConnectionState) => void): Co
     }
   }
 
+  function retry() {
+    if (currentRoomId) {
+      reconnectAttempt = 0;
+      clearReconnect();
+      connectInternal(currentRoomId, currentViewMode, false);
+    }
+  }
+
   return {
     get state() { return currentState; },
     get viewMode() { return currentViewMode; },
     connect,
     disconnect,
     send,
+    retry,
   };
 }

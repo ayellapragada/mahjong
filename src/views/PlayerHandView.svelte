@@ -3,39 +3,42 @@
   import { tileToSvgPath, tileToUnicode } from "../lib/tiles";
   import Hand from "../components/Hand.svelte";
   import CallPrompt from "../components/CallPrompt.svelte";
+  import ActionLog from "../components/ActionLog.svelte";
+  import { vibrate } from "../lib/haptics";
+  import { playSound } from "../lib/sounds";
 
   interface Props {
-    state: ClientGameState;
+    gameState: ClientGameState;
     onDiscard: (tileId: string) => void;
     onCall: (type: string, tileIds: string[]) => void;
   }
 
-  let { state, onDiscard, onCall }: Props = $props();
+  let { gameState, onDiscard, onCall }: Props = $props();
 
   const WIND_CHARS = ['東', '南', '西', '北'] as const;
 
-  let isMyTurn = $derived(state.currentTurn === state.mySeat);
-  let canDiscard = $derived(isMyTurn && state.turnPhase === "discarding");
-  let canWin = $derived(state.canWin);
+  let isMyTurn = $derived(gameState.currentTurn === gameState.mySeat);
+  let canDiscard = $derived(isMyTurn && gameState.turnPhase === "discarding");
+  let canWin = $derived(gameState.canWin);
   let showCallPrompt = $derived(
-    state.turnPhase === "waiting_for_calls" &&
-    state.availableCalls.length > 0
+    gameState.turnPhase === "waiting_for_calls" &&
+    gameState.availableCalls.length > 0
   );
 
   // Get current player name
   let currentPlayerName = $derived(
-    state.currentTurn === state.mySeat
+    gameState.currentTurn === gameState.mySeat
       ? "You"
-      : state.otherPlayers.find(p => p.seat === state.currentTurn)?.name ?? "..."
+      : gameState.otherPlayers.find(p => p.seat === gameState.currentTurn)?.name ?? "..."
   );
 
   // Get last discarded tile info
-  let lastDiscard = $derived(state.lastDiscard);
+  let lastDiscard = $derived(gameState.lastDiscard);
   let lastDiscardPlayer = $derived(
     lastDiscard
-      ? (lastDiscard.from === state.mySeat
+      ? (lastDiscard.from === gameState.mySeat
           ? "You"
-          : state.otherPlayers.find(p => p.seat === lastDiscard.from)?.name ?? "...")
+          : gameState.otherPlayers.find(p => p.seat === lastDiscard.from)?.name ?? "...")
       : null
   );
 
@@ -51,7 +54,7 @@
 
   // Get relative position name
   function getRelativePosition(seat: Seat): string {
-    const diff = (seat - state.mySeat + 4) % 4;
+    const diff = (seat - gameState.mySeat + 4) % 4;
     switch (diff) {
       case 1: return "Right";
       case 2: return "Across";
@@ -59,23 +62,35 @@
       default: return "";
     }
   }
+
+  function handleDiscardWithHaptic(tileId: string) {
+    playSound('discard');
+    vibrate('medium');
+    onDiscard(tileId);
+  }
+
+  // History modal state
+  let historyOpen = $state(false);
 </script>
 
 <div class="player-hand-view">
   <!-- Status bar -->
   <header>
     <div class="player-info">
-      <span class="wind">{WIND_CHARS[state.mySeat]}</span>
+      <span class="wind">{WIND_CHARS[gameState.mySeat]}</span>
       <span class="seat-label">You</span>
     </div>
     <div class="turn-status" class:my-turn={isMyTurn}>
       {#if isMyTurn}
         Your Turn
       {:else}
-        {WIND_CHARS[state.currentTurn]}'s Turn
+        {WIND_CHARS[gameState.currentTurn]}'s Turn
       {/if}
     </div>
-    <div class="room-code">{state.roomCode}</div>
+    <div class="header-right">
+      <button class="history-btn" onclick={() => historyOpen = true}>History</button>
+      <div class="room-code">{gameState.roomCode}</div>
+    </div>
   </header>
 
   <!-- Main content area -->
@@ -108,8 +123,8 @@
 
       <!-- Other players summary -->
       <div class="players-summary">
-        {#each state.otherPlayers as player}
-          <div class="player-chip" class:current-turn={state.currentTurn === player.seat}>
+        {#each gameState.otherPlayers as player}
+          <div class="player-chip" class:current-turn={gameState.currentTurn === player.seat}>
             <span class="chip-wind">{WIND_CHARS[player.seat]}</span>
             <span class="chip-name">{player.name}</span>
             <span class="chip-tiles">{player.handCount}</span>
@@ -122,9 +137,9 @@
     </div>
 
     <!-- Exposed melds -->
-    {#if state.myMelds.length > 0}
+    {#if gameState.myMelds.length > 0}
       <div class="my-melds">
-        {#each state.myMelds as meld}
+        {#each gameState.myMelds as meld}
           <div class="meld-group">
             <span class="meld-label">{getMeldLabel(meld)}</span>
             <div class="meld-tiles">
@@ -138,9 +153,9 @@
     {/if}
 
     <!-- Bonus tiles -->
-    {#if state.myBonusTiles.length > 0}
+    {#if gameState.myBonusTiles.length > 0}
       <div class="bonus-tiles">
-        {#each state.myBonusTiles as bonus}
+        {#each gameState.myBonusTiles as bonus}
           <img src={tileToSvgPath(bonus.tile)} alt="" class="bonus-tile" />
         {/each}
       </div>
@@ -150,23 +165,47 @@
   <!-- Hand at bottom (takes most space) -->
   <div class="hand-area">
     <Hand
-      tiles={state.myHand}
+      tiles={gameState.myHand}
       {canDiscard}
-      {onDiscard}
+      onDiscard={handleDiscardWithHaptic}
     />
   </div>
 
   <!-- Call prompt overlay -->
   {#if showCallPrompt}
     <CallPrompt
-      calls={state.availableCalls}
+      calls={gameState.availableCalls}
+      discardedTile={gameState.lastDiscard?.tile}
+      discardedBy={lastDiscardPlayer ?? undefined}
       {onCall}
     />
+  {/if}
+
+  <!-- History modal -->
+  {#if historyOpen}
+    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+    <div class="history-overlay" onclick={() => historyOpen = false}>
+      <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+      <div class="history-modal" role="dialog" aria-labelledby="history-title" onclick={(e) => e.stopPropagation()}>
+        <div class="history-header">
+          <h3 id="history-title">Game History</h3>
+          <button class="close-btn" onclick={() => historyOpen = false} aria-label="Close">×</button>
+        </div>
+        <div class="history-content">
+          {#if gameState.recentActions && gameState.recentActions.length > 0}
+            <ActionLog actions={gameState.recentActions} mySeat={gameState.mySeat} />
+          {:else}
+            <div class="no-history">No actions yet</div>
+          {/if}
+        </div>
+      </div>
+    </div>
   {/if}
 </div>
 
 <style>
   .player-hand-view {
+    width: 100%;
     height: 100vh;
     height: 100dvh;
     display: flex;
@@ -174,15 +213,18 @@
     background: linear-gradient(180deg, var(--bg-table) 0%, var(--bg-felt) 50%, var(--bg-table) 100%);
     color: var(--text-primary);
     overflow: hidden;
+    box-sizing: border-box;
   }
 
   header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: var(--space-sm) var(--space-md);
-    background: rgba(0, 0, 0, 0.4);
+    padding: var(--space-xs) var(--space-sm);
+    padding-top: calc(var(--space-xs) + env(safe-area-inset-top, 0px));
+    background: rgba(0, 0, 0, 0.5);
     flex-shrink: 0;
+    min-height: 44px;
   }
 
   .player-info {
@@ -193,19 +235,19 @@
 
   .wind {
     font-family: var(--font-display);
-    font-size: 1.5rem;
+    font-size: 1.25rem;
     color: var(--gold);
   }
 
   .seat-label {
     font-family: var(--font-body);
-    font-size: 0.9rem;
+    font-size: 0.8rem;
     color: var(--text-secondary);
   }
 
   .turn-status {
     font-family: var(--font-body);
-    font-size: 1rem;
+    font-size: 0.85rem;
     font-weight: 600;
     color: var(--text-muted);
     padding: var(--space-xs) var(--space-sm);
@@ -224,9 +266,32 @@
     50% { box-shadow: 0 0 15px rgba(212, 168, 75, 0.4); }
   }
 
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+  }
+
+  .history-btn {
+    background: rgba(0, 0, 0, 0.3);
+    color: var(--text-secondary);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 2px var(--space-xs);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-body);
+    font-size: 0.7rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .history-btn:hover {
+    background: rgba(0, 0, 0, 0.5);
+    color: var(--text-primary);
+  }
+
   .room-code {
     font-family: var(--font-body);
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     font-weight: 600;
     color: var(--gold);
     letter-spacing: 0.1em;
@@ -238,10 +303,12 @@
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
-    gap: var(--space-md);
-    padding: var(--space-md);
+    gap: var(--space-sm);
+    padding: var(--space-sm);
     min-height: 0;
     overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
   }
 
   /* Game info section */
@@ -446,72 +513,314 @@
 
   .hand-area {
     background: linear-gradient(180deg, rgba(0, 0, 0, 0.4) 0%, rgba(0, 0, 0, 0.5) 100%);
-    padding: var(--space-md);
-    padding-bottom: calc(var(--space-md) + env(safe-area-inset-bottom, 0px));
+    padding: var(--space-sm);
+    padding-bottom: calc(var(--space-sm) + env(safe-area-inset-bottom, 0px));
     border-top: 1px solid rgba(212, 168, 75, 0.2);
     flex-shrink: 0;
+    width: 100%;
+    box-sizing: border-box;
   }
 
-  /* Phone-specific optimizations */
-  @media (max-width: 500px) {
+  /* Mobile-first optimizations */
+  @media (max-width: 600px) {
+    .player-hand-view {
+      /* Ensure full viewport on mobile */
+      width: 100vw;
+      max-width: 100%;
+    }
+
     header {
-      padding: var(--space-xs) var(--space-sm);
+      padding: 6px 10px;
+      padding-top: calc(6px + env(safe-area-inset-top, 0px));
+      min-height: 40px;
     }
 
     .wind {
-      font-size: 1.2rem;
+      font-size: 1.1rem;
+    }
+
+    .seat-label {
+      font-size: 0.7rem;
     }
 
     .turn-status {
-      font-size: 0.85rem;
+      font-size: 0.75rem;
+      padding: 4px 8px;
+    }
+
+    .room-code {
+      font-size: 0.7rem;
     }
 
     .main-area {
-      padding: var(--space-sm);
+      padding: 8px;
+      gap: 8px;
+    }
+
+    .game-info {
+      gap: 6px;
+    }
+
+    .last-discard {
+      padding: 6px;
+    }
+
+    .info-label {
+      font-size: 0.6rem;
+    }
+
+    .discard-tile-wrapper {
+      padding: 3px;
+    }
+
+    .discard-tile {
+      width: 1.6rem;
+      height: 2.2rem;
+    }
+
+    .discard-tile-wrapper .tile-number {
+      font-size: 0.55rem;
+      top: 1px;
+      right: 2px;
+      padding: 0 2px;
+    }
+
+    .discard-by {
+      font-size: 0.75rem;
+    }
+
+    .players-summary {
+      gap: 4px;
+    }
+
+    .player-chip {
+      padding: 3px 6px;
+      gap: 3px;
+    }
+
+    .chip-wind {
+      font-size: 0.85rem;
+    }
+
+    .chip-name {
+      font-size: 0.7rem;
+      max-width: 45px;
+    }
+
+    .chip-tiles {
+      font-size: 0.6rem;
+      padding: 1px 4px;
+    }
+
+    .chip-melds {
+      font-size: 0.55rem;
+    }
+
+    .hu-button {
+      font-size: 1.3rem;
+      padding: 10px 20px;
+    }
+
+    .my-melds {
+      gap: 8px;
+    }
+
+    .meld-label {
+      font-size: 0.6rem;
+    }
+
+    .meld-tiles {
+      padding: 3px;
+      gap: 1px;
+    }
+
+    .meld-tile {
+      width: 1.2rem;
+      height: 1.7rem;
+    }
+
+    .bonus-tile {
+      width: 1rem;
+      height: 1.4rem;
+    }
+
+    .hand-area {
+      padding: 8px;
+      padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+    }
+  }
+
+  /* Very small phones */
+  @media (max-width: 375px) {
+    header {
+      padding: 4px 8px;
+      padding-top: calc(4px + env(safe-area-inset-top, 0px));
+    }
+
+    .wind {
+      font-size: 1rem;
+    }
+
+    .turn-status {
+      font-size: 0.7rem;
+    }
+
+    .main-area {
+      padding: 6px;
+      gap: 6px;
+    }
+
+    .player-chip {
+      padding: 2px 5px;
+    }
+
+    .chip-name {
+      max-width: 35px;
+    }
+
+    .hu-button {
+      font-size: 1.1rem;
+      padding: 8px 16px;
+    }
+
+    .hand-area {
+      padding: 6px;
+      padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
+    }
+  }
+
+  /* Landscape phone - keep hand at bottom, info at top */
+  @media (max-height: 500px) and (orientation: landscape) {
+    .player-hand-view {
+      flex-direction: column;
+    }
+
+    header {
+      padding: 4px 8px;
+      padding-top: calc(4px + env(safe-area-inset-top, 0px));
+      min-height: 32px;
+    }
+
+    .main-area {
+      flex: 1;
+      flex-direction: row;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: center;
+      gap: var(--space-sm);
+      padding: 4px 8px;
+      min-height: 0;
+    }
+
+    .game-info {
+      flex-direction: row;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: center;
+      gap: var(--space-sm);
+    }
+
+    .last-discard {
+      flex-direction: row;
+      padding: 4px 8px;
       gap: var(--space-sm);
     }
 
     .discard-tile {
-      width: 1.8rem;
-      height: 2.5rem;
+      width: 1.4rem;
+      height: 2rem;
     }
 
-    .discard-tile-wrapper .tile-number {
-      font-size: 0.6rem;
-      top: 2px;
-      right: 3px;
-      padding: 0 3px;
+    .players-summary {
+      gap: 4px;
     }
 
     .player-chip {
-      padding: 4px 8px;
-    }
-
-    .chip-name {
-      max-width: 50px;
-    }
-
-    .hu-button {
-      font-size: 1.5rem;
-      padding: var(--space-sm) var(--space-lg);
+      padding: 2px 6px;
     }
 
     .hand-area {
-      padding: var(--space-sm);
-      padding-bottom: calc(var(--space-sm) + env(safe-area-inset-bottom, 0px));
-    }
-  }
-
-  /* Landscape phone */
-  @media (max-height: 500px) and (orientation: landscape) {
-    .main-area {
-      flex-direction: row;
-      justify-content: space-around;
+      padding: 4px 8px;
+      padding-bottom: calc(4px + env(safe-area-inset-bottom, 0px));
     }
 
     .hu-button {
-      font-size: 1.2rem;
-      padding: var(--space-xs) var(--space-md);
+      font-size: 1rem;
+      padding: 6px 12px;
     }
+
+    .my-melds {
+      gap: 6px;
+    }
+
+    .meld-tile {
+      width: 1rem;
+      height: 1.4rem;
+    }
+  }
+
+  /* History modal */
+  .history-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-md);
+  }
+
+  .history-modal {
+    background: var(--bg-table);
+    border-radius: var(--radius-lg);
+    border: 1px solid rgba(212, 168, 75, 0.3);
+    max-width: 400px;
+    width: 100%;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .history-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-sm) var(--space-md);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .history-header h3 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 1rem;
+    color: var(--gold);
+  }
+
+  .close-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+  }
+
+  .close-btn:hover {
+    color: var(--text-primary);
+  }
+
+  .history-content {
+    padding: var(--space-sm);
+    overflow-y: auto;
+    flex: 1;
+  }
+
+  .no-history {
+    text-align: center;
+    color: var(--text-muted);
+    padding: var(--space-lg);
+    font-style: italic;
   }
 </style>

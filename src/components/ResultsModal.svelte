@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Seat, ScoreBreakdown, TileInstance, Meld } from "../game/types";
-  import { SEAT_NAMES, SEAT_WINDS, tileToUnicode } from "../lib/tiles";
+  import { SEAT_NAMES, SEAT_WINDS, tileToSvgPath } from "../lib/tiles";
 
   interface Props {
     winner: Seat | -1; // -1 for draw
@@ -44,7 +44,7 @@
       <div class="winning-hand">
         <div class="hand-tiles">
           {#each winningHand as tile}
-            <span class="tile">{tileToUnicode(tile.tile)}</span>
+            <img src={tileToSvgPath(tile.tile)} alt="" class="tile" />
           {/each}
         </div>
         {#if winningMelds.length > 0}
@@ -52,7 +52,7 @@
             {#each winningMelds as meld}
               <div class="meld">
                 {#each meld.tiles as tile}
-                  <span class="tile meld-tile">{tileToUnicode(tile.tile)}</span>
+                  <img src={tileToSvgPath(tile.tile)} alt="" class="tile meld-tile" />
                 {/each}
               </div>
             {/each}
@@ -202,11 +202,13 @@
   }
 
   .tile {
-    font-size: 1.4rem;
+    width: clamp(1.6rem, 5vw, 2rem);
+    height: clamp(2.2rem, 7vw, 2.8rem);
     background: linear-gradient(180deg, var(--tile-face) 0%, var(--tile-shadow) 100%);
     border-radius: 3px;
-    padding: 2px 4px;
+    padding: 2px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    object-fit: contain;
   }
 
   .melds {
@@ -228,8 +230,9 @@
   }
 
   .meld-tile {
-    font-size: 1.1rem !important;
-    padding: 1px 3px !important;
+    width: clamp(1.2rem, 4vw, 1.6rem) !important;
+    height: clamp(1.7rem, 5.5vw, 2.2rem) !important;
+    padding: 1px !important;
   }
 
   .scoring {
@@ -354,12 +357,13 @@
     }
 
     .tile {
-      font-size: 1.2rem;
-      padding: 1px 3px;
+      width: 1.4rem;
+      height: 2rem;
     }
 
     .meld-tile {
-      font-size: 1rem !important;
+      width: 1.1rem !important;
+      height: 1.5rem !important;
     }
 
     .score-grid {

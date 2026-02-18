@@ -83,40 +83,13 @@
     pointer-events: none;
   }
 
-  .tile:hover:not(.disabled) {
-    transform: translateY(-8px) scale(1.02);
-    box-shadow:
-      0 12px 24px rgba(0, 0, 0, 0.3),
-      0 4px 8px rgba(0, 0, 0, 0.2),
-      inset 0 1px 0 rgba(255, 255, 255, 0.8),
-      0 0 20px rgba(212, 168, 75, 0.15);
-    border-color: var(--gold-dark);
-  }
-
   .tile.selected {
-    transform: translateY(-12px) scale(1.04);
+    transform: translateY(-6px);
     border-color: var(--gold);
     box-shadow:
-      0 15px 30px rgba(212, 168, 75, 0.35),
-      0 5px 10px rgba(0, 0, 0, 0.2),
-      inset 0 1px 0 rgba(255, 255, 255, 0.9),
-      0 0 25px rgba(212, 168, 75, 0.4);
-    background: linear-gradient(180deg, #fffff8 0%, var(--tile-face) 100%);
-  }
-
-  .tile.selected::after {
-    content: '';
-    position: absolute;
-    inset: -4px;
-    border: 2px solid var(--gold);
-    border-radius: calc(var(--radius-md) + 2px);
-    animation: selectGlow 1s ease-in-out infinite;
-    pointer-events: none;
-  }
-
-  @keyframes selectGlow {
-    0%, 100% { opacity: 0.5; }
-    50% { opacity: 1; }
+      0 8px 16px rgba(0, 0, 0, 0.3),
+      0 0 12px rgba(212, 168, 75, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.9);
   }
 
   .tile.disabled {
@@ -126,19 +99,51 @@
   }
 
   @media (max-width: 600px) {
+    .tile {
+      /* Smaller tiles on mobile for better fit */
+      min-width: clamp(1.4rem, 7vw, 2rem);
+      min-height: clamp(2rem, 10vw, 2.8rem);
+      padding: 2px;
+      border-width: 1.5px;
+    }
+
+    .tile-svg {
+      width: clamp(1.2rem, 6vw, 1.8rem);
+      height: clamp(1.7rem, 8.5vw, 2.4rem);
+    }
+
     .tile-number {
-      font-size: 0.5rem;
-      top: 1px;
-      right: 2px;
+      font-size: 0.45rem;
+      top: 0px;
+      right: 1px;
       padding: 0 2px;
     }
 
-    .tile:hover:not(.disabled) {
-      transform: translateY(-4px) scale(1.02);
+    .tile.selected {
+      transform: translateY(-4px);
+    }
+  }
+
+  /* Very small phones */
+  @media (max-width: 375px) {
+    .tile {
+      min-width: clamp(1.2rem, 6.5vw, 1.8rem);
+      min-height: clamp(1.7rem, 9vw, 2.4rem);
+      padding: 1px;
+      border-radius: 4px;
     }
 
-    .tile.selected {
-      transform: translateY(-6px) scale(1.03);
+    .tile-svg {
+      width: clamp(1rem, 5.5vw, 1.5rem);
+      height: clamp(1.4rem, 7.5vw, 2rem);
+    }
+
+    .tile-number {
+      font-size: 0.4rem;
+    }
+
+    .tile::before {
+      inset: 2px;
     }
   }
 </style>

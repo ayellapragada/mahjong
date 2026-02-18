@@ -1,13 +1,16 @@
 <script lang="ts">
   import type { AvailableCall, TileInstance } from "../game/types";
-  import { tileToUnicode } from "../lib/tiles";
+  import { tileToUnicode, tileToSvgPath } from "../lib/tiles";
+  import { playSound } from "../lib/sounds";
 
   interface Props {
     calls: AvailableCall[];
+    discardedTile?: TileInstance;
+    discardedBy?: string;
     onCall: (type: string, tileIds: string[]) => void;
   }
 
-  let { calls, onCall }: Props = $props();
+  let { calls, discardedTile, discardedBy, onCall }: Props = $props();
 
   let selectedChiCombo = $state<number | null>(null);
 
@@ -28,21 +31,25 @@
       return; // Must select first
     }
 
+    playSound('call');
     const combo = chiCall.tiles[selectedChiCombo ?? 0];
     onCall("chi", combo.map(t => t.id));
   }
 
   function handlePeng() {
     if (!pengCall?.tiles?.[0]) return;
+    playSound('call');
     onCall("peng", pengCall.tiles[0].map(t => t.id));
   }
 
   function handleGang() {
     if (!gangCall?.tiles?.[0]) return;
+    playSound('call');
     onCall("gang", gangCall.tiles[0].map(t => t.id));
   }
 
   function handleWin() {
+    playSound('win');
     onCall("win", []);
   }
 
@@ -52,7 +59,16 @@
 </script>
 
 <div class="call-prompt">
-  <div class="call-title">A tile was discarded!</div>
+  {#if discardedTile}
+    <div class="discarded-tile-display">
+      <img src={tileToSvgPath(discardedTile.tile)} alt="" class="discarded-tile" />
+      {#if discardedBy}
+        <span class="discarded-by">by {discardedBy}</span>
+      {/if}
+    </div>
+  {:else}
+    <div class="call-title">A tile was discarded!</div>
+  {/if}
 
   <div class="call-buttons">
     {#if hasWin}
@@ -145,6 +161,33 @@
     margin-bottom: var(--space-md);
     color: var(--gold);
     text-shadow: 0 0 15px rgba(212, 168, 75, 0.4);
+  }
+
+  .discarded-tile-display {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-xs);
+    margin-bottom: var(--space-md);
+  }
+
+  .discarded-tile {
+    width: clamp(2.5rem, 10vw, 3.5rem);
+    height: clamp(3.5rem, 14vw, 5rem);
+    background: linear-gradient(180deg, var(--tile-face) 0%, var(--tile-shadow) 100%);
+    border-radius: var(--radius-md);
+    padding: 4px;
+    box-shadow:
+      0 4px 15px rgba(0, 0, 0, 0.4),
+      0 0 20px rgba(212, 168, 75, 0.3);
+    border: 2px solid var(--gold);
+    object-fit: contain;
+  }
+
+  .discarded-by {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-family: var(--font-body);
   }
 
   .call-buttons {
@@ -328,6 +371,20 @@
     .call-title {
       font-size: 1rem;
       margin-bottom: var(--space-sm);
+    }
+
+    .discarded-tile-display {
+      margin-bottom: var(--space-sm);
+    }
+
+    .discarded-tile {
+      width: 2rem;
+      height: 2.8rem;
+      padding: 3px;
+    }
+
+    .discarded-by {
+      font-size: 0.7rem;
     }
 
     .call-buttons {

@@ -3,6 +3,9 @@
   import { sortTiles } from "../game/types";
   import { untrack } from "svelte";
   import Tile from "./Tile.svelte";
+  import { getTileInfo } from "../lib/tiles";
+  import { vibrate } from "../lib/haptics";
+  import { playSound } from "../lib/sounds";
 
   interface Props {
     tiles: TileInstance[];
@@ -13,10 +16,33 @@
   let { tiles, canDiscard, onDiscard }: Props = $props();
   let selectedTileId: string | null = $state(null);
 
+  // Get info for selected tile
+  let selectedTile = $derived(
+    selectedTileId ? tiles.find(t => t.id === selectedTileId) : null
+  );
+  let selectedTileInfo = $derived(
+    selectedTile ? getTileInfo(selectedTile.tile) : null
+  );
+
   // Drag-and-drop state
   let tileOrder: string[] = $state([]);
   let draggedTileId: string | null = $state(null);
   let dropTargetIndex: number | null = $state(null);
+
+  // Touch drag state
+  let touchDragId: string | null = $state(null);
+  let touchStartX: number = $state(0);
+  let touchStartY: number = $state(0);
+  let ghostElement: HTMLDivElement | null = $state(null);
+
+  // Cleanup ghost elements on unmount
+  $effect(() => {
+    return () => {
+      if (ghostElement) {
+        ghostElement.remove();
+      }
+    };
+  });
 
   // Sync order with incoming tiles (preserve existing, append new)
   $effect(() => {
@@ -41,10 +67,11 @@
 
   function handleTileClick(tileId: string) {
     if (!canDiscard) return;
+    playSound('tile-click');
+    vibrate('light');
 
     if (selectedTileId === tileId) {
-      // Double-click to discard
-      onDiscard?.(tileId);
+      // Clicking selected tile unselects it
       selectedTileId = null;
     } else {
       selectedTileId = tileId;
@@ -104,6 +131,92 @@
     dropTargetIndex = null;
   }
 
+  function handleTouchStart(e: TouchEvent, tileId: string) {
+    const touch = e.touches[0];
+    touchDragId = tileId;
+    touchStartX = touch.clientX;
+    touchStartY = touch.clientY;
+    e.preventDefault();
+
+    // Create ghost element
+    const target = e.currentTarget as HTMLElement;
+    const rect = target.getBoundingClientRect();
+    ghostElement = document.createElement('div');
+    ghostElement.className = 'touch-ghost';
+    ghostElement.innerHTML = target.innerHTML;
+    ghostElement.style.cssText = `
+      position: fixed;
+      left: ${rect.left}px;
+      top: ${rect.top}px;
+      width: ${rect.width}px;
+      height: ${rect.height}px;
+      pointer-events: none;
+      z-index: 1000;
+      opacity: 0.8;
+      transform: scale(1.1);
+      transition: transform 0.1s ease;
+    `;
+    document.body.appendChild(ghostElement);
+  }
+
+  function handleTouchMove(e: TouchEvent) {
+    if (!touchDragId || !ghostElement) return;
+    e.preventDefault();
+
+    const touch = e.touches[0];
+
+    // Move ghost
+    const rect = ghostElement.getBoundingClientRect();
+    ghostElement.style.left = `${touch.clientX - rect.width / 2}px`;
+    ghostElement.style.top = `${touch.clientY - rect.height / 2}px`;
+
+    // Find drop target
+    const elements = document.elementsFromPoint(touch.clientX, touch.clientY);
+    const dropTarget = elements.find(el =>
+      el.classList.contains('tile-wrapper') &&
+      !el.classList.contains('dragging')
+    ) as HTMLElement | undefined;
+
+    // Update drop target indicator
+    document.querySelectorAll('.tile-wrapper.drag-over').forEach(el =>
+      el.classList.remove('drag-over')
+    );
+
+    if (dropTarget) {
+      const index = Array.from(dropTarget.parentElement?.children || []).indexOf(dropTarget);
+      dropTargetIndex = index;
+      dropTarget.classList.add('drag-over');
+    } else {
+      dropTargetIndex = null;
+    }
+  }
+
+  function handleTouchEnd(e: TouchEvent) {
+    if (!touchDragId) return;
+
+    // Complete the drop if we have a target
+    if (dropTargetIndex !== null && touchDragId) {
+      const draggedIndex = tileOrder.indexOf(touchDragId);
+      if (draggedIndex !== -1 && draggedIndex !== dropTargetIndex) {
+        const newOrder = [...tileOrder];
+        newOrder.splice(draggedIndex, 1);
+        newOrder.splice(dropTargetIndex, 0, touchDragId);
+        tileOrder = newOrder;
+      }
+    }
+
+    // Cleanup
+    if (ghostElement) {
+      ghostElement.remove();
+      ghostElement = null;
+    }
+    document.querySelectorAll('.tile-wrapper.drag-over').forEach(el =>
+      el.classList.remove('drag-over')
+    );
+    touchDragId = null;
+    dropTargetIndex = null;
+  }
+
   function handleSort() {
     const sorted = sortTiles(tiles);
     tileOrder = sorted.map(t => t.id);
@@ -117,18 +230,40 @@
     </button>
   </div>
 
+  <!-- Tile info panel - always visible to prevent layout shift -->
+  <div class="tile-info-panel" class:has-selection={selectedTileInfo}>
+    {#if selectedTileInfo}
+      <span class="info-unicode">{selectedTileInfo.unicode}</span>
+      <div class="tile-info-details">
+        <span class="info-name">{selectedTileInfo.name}</span>
+        <span class="info-type">{selectedTileInfo.type}</span>
+        <span class="info-desc">{selectedTileInfo.description}</span>
+      </div>
+    {:else}
+      <span class="info-unicode placeholder">🀄</span>
+      <div class="tile-info-details">
+        <span class="info-name placeholder">Tap a tile for info</span>
+        <span class="info-type placeholder">—</span>
+        <span class="info-desc placeholder">Select any tile to see its name and details</span>
+      </div>
+    {/if}
+  </div>
+
   <div class="hand" role="list">
     {#each orderedTiles() as tile, index (tile.id)}
       <div
         class="tile-wrapper"
         class:drag-over={dropTargetIndex === index}
-        class:dragging={draggedTileId === tile.id}
+        class:dragging={draggedTileId === tile.id || touchDragId === tile.id}
         draggable="true"
         ondragstart={(e) => handleDragStart(e, tile.id)}
         ondragover={(e) => handleDragOver(e, index)}
         ondragleave={handleDragLeave}
         ondrop={(e) => handleDrop(e, index)}
         ondragend={handleDragEnd}
+        ontouchstart={(e) => handleTouchStart(e, tile.id)}
+        ontouchmove={handleTouchMove}
+        ontouchend={handleTouchEnd}
         role="listitem"
       >
         <Tile
@@ -141,8 +276,8 @@
     {/each}
   </div>
 
-  {#if canDiscard && selectedTileId}
-    <button class="discard-btn" onclick={handleDiscardClick}>
+  {#if canDiscard}
+    <button class="discard-btn" onclick={handleDiscardClick} disabled={!selectedTileId}>
       Discard Selected
     </button>
   {/if}
@@ -191,6 +326,81 @@
 
   .sort-btn:active {
     transform: translateY(0);
+  }
+
+  /* Tile info panel */
+  .tile-info-panel {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    max-width: 100%;
+    min-height: 3.5rem;
+    transition: all 0.2s ease;
+  }
+
+  .tile-info-panel.has-selection {
+    background: rgba(0, 0, 0, 0.5);
+    border-color: rgba(212, 168, 75, 0.3);
+  }
+
+  .info-unicode {
+    font-size: 2rem;
+    line-height: 1;
+    flex-shrink: 0;
+    transition: opacity 0.2s ease;
+  }
+
+  .info-unicode.placeholder {
+    opacity: 0.3;
+  }
+
+  .tile-info-details {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .info-name {
+    font-family: var(--font-body);
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--gold);
+    transition: color 0.2s ease;
+  }
+
+  .info-name.placeholder {
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+
+  .info-type {
+    font-family: var(--font-body);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .info-type.placeholder {
+    color: var(--text-muted);
+    opacity: 0.5;
+  }
+
+  .info-desc {
+    font-family: var(--font-body);
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    line-height: 1.3;
+  }
+
+  .info-desc.placeholder {
+    opacity: 0.5;
   }
 
   .hand {
@@ -276,28 +486,123 @@
     transform: translateY(0);
   }
 
+  .discard-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    animation: none;
+    background: linear-gradient(135deg, #666 0%, #444 100%);
+    box-shadow: none;
+  }
+
+  .discard-btn:disabled:hover {
+    transform: none;
+  }
+
   @media (max-width: 600px) {
     .hand-container {
-      gap: var(--space-sm);
+      gap: 6px;
+      width: 100%;
     }
 
     .hand-header {
-      padding: 0 var(--space-sm);
+      padding: 0 6px;
     }
 
     .sort-btn {
-      padding: var(--space-xs) var(--space-sm);
-      font-size: 0.75rem;
+      padding: 4px 10px;
+      font-size: 0.7rem;
+    }
+
+    .tile-info-panel {
+      padding: 6px 10px;
+      gap: 10px;
+      min-height: 3rem;
+    }
+
+    .info-unicode {
+      font-size: 1.5rem;
+    }
+
+    .info-name {
+      font-size: 0.85rem;
+    }
+
+    .info-type {
+      font-size: 0.65rem;
+    }
+
+    .info-desc {
+      font-size: 0.7rem;
     }
 
     .hand {
-      padding: var(--space-sm) var(--space-md);
+      padding: 8px 6px;
       gap: 2px;
+      width: 100%;
+      box-sizing: border-box;
     }
 
     .discard-btn {
-      padding: var(--space-xs) var(--space-md);
-      font-size: 0.85rem;
+      padding: 8px 16px;
+      font-size: 0.8rem;
     }
+  }
+
+  /* Very small phones */
+  @media (max-width: 375px) {
+    .hand-container {
+      gap: 4px;
+    }
+
+    .sort-btn {
+      padding: 3px 8px;
+      font-size: 0.65rem;
+    }
+
+    .tile-info-panel {
+      padding: 4px 8px;
+      gap: 8px;
+      min-height: 2.5rem;
+    }
+
+    .info-unicode {
+      font-size: 1.2rem;
+    }
+
+    .info-name {
+      font-size: 0.75rem;
+    }
+
+    .info-type {
+      font-size: 0.6rem;
+    }
+
+    .info-desc {
+      font-size: 0.65rem;
+      display: none; /* Hide description on very small screens */
+    }
+
+    .hand {
+      padding: 6px 4px;
+      gap: 1px;
+    }
+
+    .discard-btn {
+      padding: 6px 12px;
+      font-size: 0.75rem;
+    }
+  }
+
+  :global(.touch-ghost) {
+    background: linear-gradient(180deg, var(--tile-face) 0%, var(--tile-shadow) 100%);
+    border: 2px solid var(--gold);
+    border-radius: var(--radius-md);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 20px rgba(212, 168, 75, 0.3);
+  }
+
+  :global(.touch-ghost img) {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
   }
 </style>

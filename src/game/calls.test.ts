@@ -30,6 +30,7 @@ function makeMinimalState(overrides: Partial<GameState> = {}): GameState {
     scores: { 0: 0, 1: 0, 2: 0, 3: 0 },
     roundNumber: 1,
     handNumber: 1,
+    actionLog: [],
     ...overrides,
   };
 }

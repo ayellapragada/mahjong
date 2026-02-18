@@ -13,6 +13,7 @@ import {
   getClientState,
   getTableState,
   generateRoomCode,
+  logAction,
 } from "../src/game/engine";
 import { registerCall, resolveCallWindow } from "../src/game/calls";
 import { getRuleset } from "../src/game/rulesets";
@@ -112,6 +113,9 @@ export class MahjongRoom extends Server {
       case "START_NEXT_ROUND":
         this.handleStartNextRound(sender);
         break;
+      case "REJOIN":
+        this.handleRejoin(sender, action.name, action.seat);
+        break;
       default:
         this.sendError(sender, `Unknown action: ${(action as any).type}`);
     }
@@ -147,6 +151,36 @@ export class MahjongRoom extends Server {
       this.broadcastGameState();
       await this.scheduleBotActions();
     }
+  }
+
+  handleRejoin(conn: Connection, name: string, seat: Seat) {
+    // Only allow rejoin during active game
+    if (this.state.phase === "waiting") {
+      this.sendError(conn, "Cannot rejoin during lobby - please take a seat normally");
+      return;
+    }
+
+    // Find the player at this seat
+    const seatPlayer = this.state.players.find(p => p.seat === seat);
+
+    if (!seatPlayer) {
+      this.sendError(conn, "No player at that seat");
+      return;
+    }
+
+    // Validate the name matches
+    if (seatPlayer.name !== name) {
+      this.sendError(conn, "Name does not match seat");
+      return;
+    }
+
+    // Update the player's connection ID to this new connection
+    seatPlayer.id = conn.id;
+
+    console.log(`[${this.state.roomCode}] Player ${name} rejoined seat ${seat}`);
+
+    // Send current state to the rejoined player
+    this.broadcastGameState();
   }
 
   async handleStartGame(conn: Connection) {
@@ -189,6 +223,7 @@ export class MahjongRoom extends Server {
       return;
     }
 
+    const discardedTile = player.hand.find(t => t.id === tileId);
     const ruleset = getRuleset(this.state.rulesetId);
     const result = discardTile(this.state, player.seat, tileId, ruleset);
 
@@ -199,7 +234,10 @@ export class MahjongRoom extends Server {
 
     this.state = result;
 
-    // If no calls pending, next player draws
+    if (discardedTile) {
+      this.state = logAction(this.state, 'discard', player.seat, discardedTile);
+    }
+
     if (this.state.turnPhase === "drawing") {
       const drawResult = drawTile(this.state, ruleset);
       if (!("error" in drawResult)) {
@@ -422,7 +460,6 @@ export class MahjongRoom extends Server {
 
     // Find the first bot that needs to act
     for (const [seat, bot] of this.bots) {
-      // Check if bot needs to act
       const needsToAct = (this.state.currentTurn === seat && this.state.turnPhase === 'discarding') ||
                          (this.state.turnPhase === 'waiting_for_calls' && this.state.awaitingCallFrom.includes(seat));
 
@@ -431,18 +468,13 @@ export class MahjongRoom extends Server {
         if (action) {
           await this.executeBotAction(seat, action);
         }
-
-        // Only handle one bot at a time
         return;
       }
     }
   }
 
   async executeBotAction(seat: Seat, action: BotAction) {
-    // Verify bot still exists (wasn't bumped by human)
     if (!this.bots.has(seat)) return;
-
-    console.log(`[${this.state.roomCode}] Bot ${seat} executing:`, action.type);
 
     switch (action.type) {
       case 'discard':
@@ -461,17 +493,22 @@ export class MahjongRoom extends Server {
   }
 
   async handleBotDiscard(seat: Seat, tileId: string) {
+    const botPlayer = this.state.players.find(p => p.seat === seat);
+    const discardedTile = botPlayer?.hand.find(t => t.id === tileId);
+
     const ruleset = getRuleset(this.state.rulesetId);
     const result = discardTile(this.state, seat, tileId, ruleset);
 
     if ("error" in result) {
-      console.error(`[${this.state.roomCode}] Bot discard error:`, result.error);
       return;
     }
 
     this.state = result;
 
-    // If no calls pending, next player draws
+    if (discardedTile) {
+      this.state = logAction(this.state, 'discard', seat, discardedTile);
+    }
+
     if (this.state.turnPhase === "drawing") {
       const drawResult = drawTile(this.state, ruleset);
       if (!("error" in drawResult)) {
@@ -488,6 +525,9 @@ export class MahjongRoom extends Server {
     if (this.state.turnPhase !== "waiting_for_calls") return;
     if (!this.state.awaitingCallFrom.includes(seat)) return;
 
+    const calledTile = this.state.lastDiscard?.tile;
+    const fromSeat = this.state.lastDiscard?.from;
+
     this.state = registerCall(this.state, seat, callType, tileIds);
 
     const ruleset = getRuleset(this.state.rulesetId);
@@ -495,6 +535,10 @@ export class MahjongRoom extends Server {
 
     if (resolved !== this.state) {
       this.state = resolved;
+
+      if (this.state.currentTurn === seat && calledTile) {
+        this.state = logAction(this.state, callType, seat, calledTile, fromSeat);
+      }
 
       if (this.state.turnPhase === "replacing" || this.state.turnPhase === "drawing") {
         const drawResult = drawTile(this.state, ruleset);

@@ -115,6 +115,9 @@ export interface GameState {
   // Round tracking
   roundNumber: number;
   handNumber: number; // Resets when dealer changes
+
+  // Action history for debugging and display
+  actionLog: GameAction[];
 }
 
 export type TurnPhase =
@@ -173,6 +176,9 @@ export interface ClientGameState {
 
   // Win detection
   canWin: boolean;
+
+  // Action history (last N actions)
+  recentActions: GameAction[];
 }
 
 export interface AvailableCall {
@@ -186,6 +192,7 @@ export interface AvailableCall {
 
 export type ClientAction =
   | { type: 'JOIN'; name: string; seat: Seat }
+  | { type: 'REJOIN'; name: string; seat: Seat }
   | { type: 'START_GAME' }
   | { type: 'DISCARD'; tileId: string }
   | { type: 'DECLARE_BONUS'; tileId: string }
@@ -311,6 +318,30 @@ export function isTerminalTile(tile: Tile): boolean {
 
 export function isSimpleTile(tile: Tile): boolean {
   return tile.type === 'suited' && tile.value >= 2 && tile.value <= 8;
+}
+
+// ============================================================================
+// GAME ACTION LOG
+// ============================================================================
+
+export type GameActionType =
+  | 'draw'
+  | 'discard'
+  | 'chi'
+  | 'peng'
+  | 'gang'
+  | 'win'
+  | 'pass'
+  | 'game_start'
+  | 'round_start';
+
+export interface GameAction {
+  type: GameActionType;
+  seat: Seat;
+  playerName: string;
+  tile?: TileInstance; // The tile involved (discarded, drawn, etc.)
+  fromSeat?: Seat; // For calls - who the tile was taken from
+  timestamp: number;
 }
 
 // ============================================================================
