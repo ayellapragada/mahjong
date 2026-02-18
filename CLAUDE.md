@@ -52,6 +52,10 @@ Use the Playwright MCP to validate and verify the game works:
 - Pure functions for game logic (no side effects)
 - Svelte 5 runes syntax ($state, $derived, $props)
 
+## Git Commits
+
+- Do NOT add "Co-Authored-By" lines to commits
+
 ## Planned Features
 
 ### Bot Players (for testing)

@@ -1,10 +1,11 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import type { Seat } from "./game/types";
+  import type { Seat, ScoreBreakdown } from "./game/types";
   import { createConnection, type ConnectionState } from "./lib/connection";
   import HomeView from "./views/HomeView.svelte";
   import LobbyView from "./views/LobbyView.svelte";
   import GameView from "./views/GameView.svelte";
+  import ResultsModal from "./components/ResultsModal.svelte";
 
   let connectionState: ConnectionState = $state({ status: "disconnected" });
 

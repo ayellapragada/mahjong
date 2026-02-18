@@ -1,10 +1,10 @@
-import type { ClientAction, ServerMessage, ClientGameState, Seat } from "../game/types";
+import type { ClientAction, ServerMessage, ClientGameState, Seat, ScoreBreakdown } from "../game/types";
 
 export type ConnectionState =
   | { status: "disconnected" }
   | { status: "connecting" }
   | { status: "connected"; roomCode: string; players: Array<{ name: string; seat: Seat }> }
-  | { status: "playing"; state: ClientGameState };
+  | { status: "playing"; state: ClientGameState; gameOver?: { winner: Seat | -1; scores: Record<Seat, number>; breakdown: ScoreBreakdown } };
 
 export type ConnectionStore = {
   state: ConnectionState;
@@ -58,6 +58,19 @@ export function createConnection(onUpdate: (state: ConnectionState) => void): Co
             status: "playing",
             state: message.state,
           });
+          break;
+        case "GAME_OVER":
+          // Keep the current state but add gameOver data
+          if (currentState.status === "playing") {
+            setState({
+              ...currentState,
+              gameOver: {
+                winner: message.winner,
+                scores: message.scores,
+                breakdown: message.breakdown,
+              },
+            });
+          }
           break;
         case "ERROR":
           console.error("Server error:", message.message);
