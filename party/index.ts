@@ -1,5 +1,5 @@
 import { routePartykitRequest, Server } from "partyserver";
-import type { Connection } from "partyserver";
+import type { Connection, ConnectionContext } from "partyserver";
 import type { GameState, ClientAction, ServerMessage, Seat } from "../src/game/types";
 import { BotPlayer, type BotAction } from "./bot";
 import {
@@ -23,6 +23,8 @@ export class MahjongRoom extends Server {
   bots: Map<Seat, BotPlayer> = new Map();
   pendingBotAction?: { seat: Seat; scheduledAt: number };
   lastWinner?: Seat;
+  // Track which connections are table-only (iPad) vs player (phone)
+  tableConnections: Set<string> = new Set();
 
   onStart() {
     // Initialize with a generated room code
@@ -32,8 +34,18 @@ export class MahjongRoom extends Server {
     console.log(`[${this.state.roomCode}] Room started`);
   }
 
-  onConnect(conn: Connection) {
-    console.log(`[${this.state.roomCode}] Connection: ${conn.id}`);
+  onConnect(conn: Connection, ctx: ConnectionContext) {
+    // Check if this is a table-only connection via query param
+    const url = new URL(ctx.request.url);
+    const mode = url.searchParams.get("mode");
+    const isTableMode = mode === "table";
+
+    if (isTableMode) {
+      this.tableConnections.add(conn.id);
+      console.log(`[${this.state.roomCode}] Table connection: ${conn.id}`);
+    } else {
+      console.log(`[${this.state.roomCode}] Player connection: ${conn.id}`);
+    }
 
     // Send current room info to new connection
     this.sendToConnection(conn, {
@@ -41,10 +53,18 @@ export class MahjongRoom extends Server {
       roomCode: this.state.roomCode,
       players: this.state.players.map(p => ({ name: p.name, seat: p.seat })),
     });
+
+    // If game is already playing, send current state immediately
+    if (this.state.phase === "playing") {
+      this.sendStateToConnection(conn);
+    }
   }
 
   onClose(conn: Connection) {
     console.log(`[${this.state.roomCode}] Disconnected: ${conn.id}`);
+
+    // Clean up table connection tracking
+    this.tableConnections.delete(conn.id);
 
     // Remove player if game hasn't started
     if (this.state.phase === "waiting") {
@@ -398,7 +418,6 @@ export class MahjongRoom extends Server {
   }
 
   async scheduleBotActions() {
-    this.broadcastDebug(`scheduleBotActions: phase=${this.state.phase}, bots=${this.bots.size}, turnPhase=${this.state.turnPhase}, currentTurn=${this.state.currentTurn}`);
     if (this.state.phase !== 'playing') return;
 
     // Find the first bot that needs to act
@@ -407,59 +426,15 @@ export class MahjongRoom extends Server {
       const needsToAct = (this.state.currentTurn === seat && this.state.turnPhase === 'discarding') ||
                          (this.state.turnPhase === 'waiting_for_calls' && this.state.awaitingCallFrom.includes(seat));
 
-      this.broadcastDebug(`Bot ${seat} check: needsToAct=${needsToAct}`);
-
       if (needsToAct) {
-        // Execute bot action immediately (no delay for now to debug)
-        this.broadcastDebug(`Bot ${seat} executing action...`);
-        try {
-          const action = bot.decideAction(this.state);
-          this.broadcastDebug(`Bot ${seat} decided: ${JSON.stringify(action)}`);
-
-          if (action) {
-            await this.executeBotAction(seat, action);
-          } else {
-            const player = this.state.players.find(p => p.seat === seat);
-            this.broadcastDebug(`Bot ${seat} null action! player=${player ? `handSize=${player.hand.length}` : 'NOT FOUND'}`);
-          }
-        } catch (err) {
-          this.broadcastDebug(`Bot ${seat} ERROR: ${err}`);
+        const action = bot.decideAction(this.state);
+        if (action) {
+          await this.executeBotAction(seat, action);
         }
 
         // Only handle one bot at a time
         return;
       }
-    }
-  }
-
-  // Called when the alarm fires
-  async onAlarm() {
-    console.log(`[${this.state.roomCode}] onAlarm fired, pendingBotAction=${JSON.stringify(this.pendingBotAction)}`);
-
-    if (!this.pendingBotAction) {
-      console.log(`[${this.state.roomCode}] No pending bot action`);
-      return;
-    }
-
-    const { seat } = this.pendingBotAction;
-    this.pendingBotAction = undefined;
-
-    const bot = this.bots.get(seat);
-    if (!bot) {
-      console.log(`[${this.state.roomCode}] Bot ${seat} no longer exists`);
-      return;
-    }
-
-    console.log(`[${this.state.roomCode}] Bot ${seat} alarm fired, turnPhase=${this.state.turnPhase}, currentTurn=${this.state.currentTurn}`);
-    const action = bot.decideAction(this.state);
-    console.log(`[${this.state.roomCode}] Bot ${seat} decided action:`, action);
-
-    if (action) {
-      await this.executeBotAction(seat, action);
-    } else {
-      console.log(`[${this.state.roomCode}] Bot ${seat} returned null action!`);
-      const player = this.state.players.find(p => p.seat === seat);
-      console.log(`[${this.state.roomCode}] Bot ${seat} player found:`, player ? `handSize=${player.hand.length}` : 'NOT FOUND');
     }
   }
 
@@ -617,6 +592,29 @@ export class MahjongRoom extends Server {
 
   broadcastGameState() {
     for (const conn of this.getConnections()) {
+      this.sendStateToConnection(conn);
+    }
+  }
+
+  sendStateToConnection(conn: Connection) {
+    // Table connections always get table-only state (no hands)
+    const isTableConnection = this.tableConnections.has(conn.id);
+
+    if (isTableConnection) {
+      // Table view (iPad) - shows all players but no hands
+      const tableState = getTableState(this.state);
+      this.sendToConnection(conn, {
+        type: "STATE_UPDATE",
+        state: {
+          ...tableState,
+          mySeat: 0 as Seat, // Dummy value for table view
+          myHand: [],
+          myMelds: [],
+          myBonusTiles: [],
+        },
+      });
+    } else {
+      // Player connection - check if they're a player in the game
       const clientState = getClientState(this.state, conn.id);
 
       if (clientState) {
@@ -626,13 +624,13 @@ export class MahjongRoom extends Server {
           state: clientState,
         });
       } else {
-        // Spectator/table view - no hands visible
+        // Spectator (not a table, not a player) - generic view
         const tableState = getTableState(this.state);
         this.sendToConnection(conn, {
           type: "STATE_UPDATE",
           state: {
             ...tableState,
-            mySeat: 0 as Seat, // Dummy value for spectators
+            mySeat: 0 as Seat,
             myHand: [],
             myMelds: [],
             myBonusTiles: [],

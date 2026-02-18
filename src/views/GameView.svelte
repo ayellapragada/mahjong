@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ClientGameState, Meld } from "../game/types";
+  import type { ClientGameState, Meld, Seat, RedactedPlayer } from "../game/types";
   import { SEAT_NAMES, SEAT_WINDS, tileToUnicode, tileToSvgPath } from "../lib/tiles";
   import Hand from "../components/Hand.svelte";
   import CallPrompt from "../components/CallPrompt.svelte";
@@ -23,6 +23,20 @@
     state.availableCalls.length > 0
   );
 
+  // Relative seat positions (you are always at bottom)
+  let acrossSeat = $derived(((state.mySeat + 2) % 4) as Seat);
+  let rightSeat = $derived(((state.mySeat + 1) % 4) as Seat);
+  let leftSeat = $derived(((state.mySeat + 3) % 4) as Seat);
+
+  // Helper to find player by seat
+  function getPlayer(seat: Seat): RedactedPlayer | undefined {
+    return state.otherPlayers.find(p => p.seat === seat);
+  }
+
+  let acrossPlayer = $derived(getPlayer(acrossSeat));
+  let rightPlayer = $derived(getPlayer(rightSeat));
+  let leftPlayer = $derived(getPlayer(leftSeat));
+
   // Get meld type label
   function getMeldLabel(meld: Meld): string {
     switch (meld.type) {
@@ -41,21 +55,21 @@
   </header>
 
   <div class="table">
-    <!-- Other players with exposed melds -->
-    <div class="opponents">
-      {#each state.otherPlayers as player}
-        <div class="opponent" class:current-turn={state.currentTurn === player.seat}>
-          <div class="opponent-name">
-            {WIND_CHARS[player.seat]} {player.name}
-            {#if player.isDealer}
+    <!-- Top: Across opponent -->
+    <div class="table-top">
+      {#if acrossPlayer}
+        <div class="opponent top" class:current-turn={state.currentTurn === acrossSeat}>
+          <div class="opponent-info">
+            <span class="opponent-wind">{WIND_CHARS[acrossSeat]}</span>
+            <span class="opponent-name">{acrossPlayer.name}</span>
+            {#if acrossPlayer.isDealer}
               <span class="dealer-badge">莊</span>
             {/if}
           </div>
-          {#if player.melds.length > 0}
+          {#if acrossPlayer.melds.length > 0}
             <div class="opponent-melds">
-              {#each player.melds as meld}
+              {#each acrossPlayer.melds as meld}
                 <div class="labeled-meld">
-                  <span class="meld-label">{getMeldLabel(meld)}</span>
                   <div class="meld-tiles">
                     {#each meld.tiles as tile}
                       <img src={tileToSvgPath(tile.tile)} alt="" class="mini-tile" />
@@ -65,41 +79,114 @@
               {/each}
             </div>
           {/if}
-        </div>
-      {/each}
-    </div>
-
-    <!-- Central turn indicator -->
-    <div class="turn-center">
-      <div class="turn-wind" class:active={true}>
-        {WIND_CHARS[state.currentTurn]}
-      </div>
-      <div class="turn-name">
-        {#if isMyTurn}
-          Your Turn
-        {:else}
-          {state.otherPlayers.find(p => p.seat === state.currentTurn)?.name || SEAT_NAMES[state.currentTurn]}
-        {/if}
-      </div>
-    </div>
-
-    <!-- Discard piles -->
-    <div class="discard-area">
-      {#each [0, 1, 2, 3] as seatNum}
-        {@const seat = seatNum as 0 | 1 | 2 | 3}
-        <div class="discard-pile" class:current={state.currentTurn === seat}>
-          <div class="pile-label">{WIND_CHARS[seat]}</div>
-          <div class="pile-tiles">
-            {#each state.discardPiles[seat].tiles as tile}
-              <span class="discarded">{tileToUnicode(tile.tile)}</span>
+          <div class="hand-backs">
+            {#each Array(acrossPlayer.handCount) as _}
+              <div class="tile-back"></div>
             {/each}
           </div>
         </div>
-      {/each}
+      {/if}
+    </div>
+
+    <!-- Left opponent -->
+    <div class="table-left">
+      {#if leftPlayer}
+        <div class="opponent left" class:current-turn={state.currentTurn === leftSeat}>
+          <div class="opponent-info">
+            <span class="opponent-wind">{WIND_CHARS[leftSeat]}</span>
+            <span class="opponent-name">{leftPlayer.name}</span>
+            {#if leftPlayer.isDealer}
+              <span class="dealer-badge">莊</span>
+            {/if}
+          </div>
+          {#if leftPlayer.melds.length > 0}
+            <div class="opponent-melds vertical">
+              {#each leftPlayer.melds as meld}
+                <div class="labeled-meld">
+                  <div class="meld-tiles vertical">
+                    {#each meld.tiles as tile}
+                      <img src={tileToSvgPath(tile.tile)} alt="" class="mini-tile" />
+                    {/each}
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {/if}
+          <div class="hand-backs vertical">
+            {#each Array(leftPlayer.handCount) as _}
+              <div class="tile-back"></div>
+            {/each}
+          </div>
+        </div>
+      {/if}
+    </div>
+
+    <!-- Center: turn indicator + discard pool -->
+    <div class="table-center">
+      <div class="turn-indicator">
+        <div class="turn-wind" class:active={true}>
+          {WIND_CHARS[state.currentTurn]}
+        </div>
+        <div class="turn-label">
+          {#if isMyTurn}
+            Your Turn
+          {:else}
+            {state.otherPlayers.find(p => p.seat === state.currentTurn)?.name || SEAT_NAMES[state.currentTurn]}
+          {/if}
+        </div>
+      </div>
+
+      <!-- Central discard pool -->
+      <div class="discard-pool">
+        {#each [0, 1, 2, 3] as seatNum}
+          {@const seat = seatNum as 0 | 1 | 2 | 3}
+          <div class="discard-section" class:current={state.currentTurn === seat} class:is-me={seat === state.mySeat}>
+            <div class="discard-label">{WIND_CHARS[seat]}</div>
+            <div class="discard-tiles">
+              {#each state.discardPiles[seat].tiles as tile, i}
+                <span class="discarded" class:latest={i === state.discardPiles[seat].tiles.length - 1}>{tileToUnicode(tile.tile)}</span>
+              {/each}
+            </div>
+          </div>
+        {/each}
+      </div>
+    </div>
+
+    <!-- Right opponent -->
+    <div class="table-right">
+      {#if rightPlayer}
+        <div class="opponent right" class:current-turn={state.currentTurn === rightSeat}>
+          <div class="opponent-info">
+            <span class="opponent-wind">{WIND_CHARS[rightSeat]}</span>
+            <span class="opponent-name">{rightPlayer.name}</span>
+            {#if rightPlayer.isDealer}
+              <span class="dealer-badge">莊</span>
+            {/if}
+          </div>
+          {#if rightPlayer.melds.length > 0}
+            <div class="opponent-melds vertical">
+              {#each rightPlayer.melds as meld}
+                <div class="labeled-meld">
+                  <div class="meld-tiles vertical">
+                    {#each meld.tiles as tile}
+                      <img src={tileToSvgPath(tile.tile)} alt="" class="mini-tile" />
+                    {/each}
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {/if}
+          <div class="hand-backs vertical">
+            {#each Array(rightPlayer.handCount) as _}
+              <div class="tile-back"></div>
+            {/each}
+          </div>
+        </div>
+      {/if}
     </div>
   </div>
 
-  <!-- My area -->
+  <!-- My area (bottom) -->
   <div class="my-area">
     {#if canWin}
       <button class="hu-button" onclick={() => onCall('win', [])}>
@@ -166,107 +253,184 @@
     pointer-events: none;
   }
 
-  /* Simplified header */
+  /* Header */
   header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: var(--space-sm) var(--space-md);
+    padding: var(--space-xs) var(--space-sm);
     position: relative;
-    z-index: 1;
+    z-index: 10;
     flex-shrink: 0;
   }
 
   .room-badge {
     background: rgba(0, 0, 0, 0.4);
     color: var(--gold);
-    padding: var(--space-xs) var(--space-sm);
+    padding: 2px var(--space-xs);
     border-radius: var(--radius-sm);
     font-family: var(--font-body);
     font-weight: 600;
-    font-size: 0.85rem;
+    font-size: 0.75rem;
     letter-spacing: 0.1em;
   }
 
   .wall-count {
     color: var(--text-muted);
-    font-size: 0.85rem;
+    font-size: 0.75rem;
     font-family: var(--font-body);
   }
 
+  /* Square table grid layout */
   .table {
     flex: 1;
-    display: flex;
-    flex-direction: column;
-    padding: var(--space-sm) var(--space-md);
-    gap: var(--space-sm);
-    overflow: auto;
+    display: grid;
+    grid-template-areas:
+      "top top top"
+      "left center right"
+      ". . .";
+    grid-template-columns: minmax(60px, auto) 1fr minmax(60px, auto);
+    grid-template-rows: auto 1fr auto;
+    padding: var(--space-xs);
+    gap: var(--space-xs);
+    overflow: hidden;
     position: relative;
     z-index: 1;
+    min-height: 0;
   }
 
-  /* Opponents section */
-  .opponents {
+  /* Top opponent (across) */
+  .table-top {
+    grid-area: top;
     display: flex;
     justify-content: center;
-    flex-wrap: wrap;
-    gap: var(--space-sm);
   }
 
-  .opponent {
+  .opponent.top {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: var(--space-xs);
+    gap: 4px;
     padding: var(--space-xs) var(--space-sm);
     border-radius: var(--radius-md);
     transition: all 0.3s ease;
   }
 
+  /* Left opponent */
+  .table-left {
+    grid-area: left;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .opponent.left {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: var(--space-xs);
+    border-radius: var(--radius-md);
+    transition: all 0.3s ease;
+  }
+
+  /* Right opponent */
+  .table-right {
+    grid-area: right;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .opponent.right {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: var(--space-xs);
+    border-radius: var(--radius-md);
+    transition: all 0.3s ease;
+  }
+
+  /* Center area */
+  .table-center {
+    grid-area: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /* Opponent shared styles */
+  .opponent {
+    background: rgba(0, 0, 0, 0.2);
+  }
+
   .opponent.current-turn {
     background: rgba(212, 168, 75, 0.15);
-    box-shadow: 0 0 20px rgba(212, 168, 75, 0.2);
+    box-shadow: 0 0 20px rgba(212, 168, 75, 0.3);
+  }
+
+  .opponent-info {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-family: var(--font-body);
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+  }
+
+  .opponent.current-turn .opponent-info {
+    color: var(--gold);
+  }
+
+  .opponent-wind {
+    font-family: var(--font-display);
+    font-size: 1rem;
   }
 
   .opponent-name {
-    font-family: var(--font-body);
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    display: flex;
-    align-items: center;
-    gap: var(--space-xs);
-  }
-
-  .opponent.current-turn .opponent-name {
-    color: var(--gold);
+    font-size: 0.75rem;
+    max-width: 80px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .dealer-badge {
     background: linear-gradient(135deg, var(--crimson) 0%, #8b0000 100%);
     color: white;
-    padding: 0.1rem 0.4rem;
+    padding: 0.1rem 0.3rem;
     border-radius: var(--radius-sm);
-    font-size: 0.65rem;
+    font-size: 0.55rem;
     font-family: var(--font-display);
   }
 
+  /* Opponent melds */
   .opponent-melds {
     display: flex;
-    gap: var(--space-sm);
+    gap: 4px;
     flex-wrap: wrap;
     justify-content: center;
   }
 
-  /* Labeled meld component */
+  .opponent-melds.vertical {
+    flex-direction: column;
+    align-items: center;
+  }
+
   .labeled-meld {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 2px;
+    gap: 1px;
   }
 
   .meld-label {
-    font-size: 0.6rem;
+    font-size: 0.5rem;
     font-family: var(--font-body);
     font-weight: 600;
     color: var(--text-muted);
@@ -282,29 +446,55 @@
     border-radius: var(--radius-sm);
   }
 
+  .meld-tiles.vertical {
+    flex-direction: column;
+  }
+
   .mini-tile {
-    width: clamp(1rem, 3vw, 1.4rem);
-    height: clamp(1.4rem, 4vw, 2rem);
+    width: clamp(0.9rem, 2.5vw, 1.2rem);
+    height: clamp(1.2rem, 3.5vw, 1.7rem);
     background: linear-gradient(180deg, var(--tile-face) 0%, var(--tile-shadow) 100%);
     border-radius: 2px;
     padding: 1px;
     object-fit: contain;
   }
 
-  /* Central turn indicator */
-  .turn-center {
+  /* Tile backs for opponent hands */
+  .hand-backs {
+    display: flex;
+    gap: 1px;
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: 200px;
+  }
+
+  .hand-backs.vertical {
+    flex-direction: column;
+    max-width: none;
+    max-height: 150px;
+  }
+
+  .tile-back {
+    width: clamp(0.7rem, 2vw, 1rem);
+    height: clamp(1rem, 2.8vw, 1.4rem);
+    background: linear-gradient(135deg, #1a4f3a 0%, #0d2a1f 100%);
+    border-radius: 2px;
+    border: 1px solid rgba(212, 168, 75, 0.2);
+  }
+
+  /* Turn indicator */
+  .turn-indicator {
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    padding: var(--space-md);
+    gap: 2px;
   }
 
   .turn-wind {
-    font-size: clamp(2.5rem, 8vw, 4rem);
+    font-size: clamp(2rem, 6vw, 3rem);
     font-family: var(--font-display);
     color: var(--gold);
-    text-shadow: 0 0 30px rgba(212, 168, 75, 0.5);
+    text-shadow: 0 0 20px rgba(212, 168, 75, 0.5);
     line-height: 1;
   }
 
@@ -314,77 +504,84 @@
 
   @keyframes windPulse {
     0%, 100% {
-      text-shadow: 0 0 30px rgba(212, 168, 75, 0.5);
+      text-shadow: 0 0 20px rgba(212, 168, 75, 0.5);
       transform: scale(1);
     }
     50% {
-      text-shadow: 0 0 50px rgba(212, 168, 75, 0.8);
+      text-shadow: 0 0 40px rgba(212, 168, 75, 0.8);
       transform: scale(1.05);
     }
   }
 
-  .turn-name {
-    font-size: 0.85rem;
+  .turn-label {
+    font-size: 0.7rem;
     color: var(--text-secondary);
     font-family: var(--font-body);
-    margin-top: var(--space-xs);
   }
 
-  /* Discard area */
-  .discard-area {
+  /* Central discard pool */
+  .discard-pool {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: 1fr 1fr;
     gap: var(--space-xs);
+    background: rgba(0, 0, 0, 0.25);
+    padding: var(--space-sm);
+    border-radius: var(--radius-md);
+    max-width: min(400px, 90vw);
+    width: 100%;
   }
 
-  .discard-pile {
-    background: rgba(0, 0, 0, 0.2);
-    padding: var(--space-xs) var(--space-sm);
-    border-radius: var(--radius-md);
+  .discard-section {
+    padding: var(--space-xs);
+    border-radius: var(--radius-sm);
     border: 1px solid transparent;
     transition: all 0.3s ease;
   }
 
-  .discard-pile.current {
-    border-color: rgba(212, 168, 75, 0.3);
-    background: rgba(212, 168, 75, 0.05);
+  .discard-section.current {
+    border-color: rgba(212, 168, 75, 0.4);
+    background: rgba(212, 168, 75, 0.1);
   }
 
-  .pile-label {
+  .discard-section.is-me {
+    background: rgba(100, 180, 130, 0.1);
+  }
+
+  .discard-label {
     font-family: var(--font-display);
-    font-size: 0.9rem;
-    margin-bottom: 2px;
+    font-size: 0.7rem;
     color: var(--text-muted);
+    margin-bottom: 2px;
   }
 
-  .discard-pile.current .pile-label {
+  .discard-section.current .discard-label {
     color: var(--gold);
   }
 
-  .pile-tiles {
+  .discard-tiles {
     display: flex;
     flex-wrap: wrap;
     gap: 2px;
-    min-height: clamp(1.5rem, 4vw, 2rem);
+    min-height: 1.5rem;
   }
 
   .discarded {
-    font-size: clamp(1rem, 3.5vw, 1.4rem);
+    font-size: clamp(0.9rem, 3vw, 1.2rem);
     background: linear-gradient(180deg, var(--tile-face) 0%, var(--tile-shadow) 100%);
     border-radius: var(--radius-sm);
     padding: 0.05rem 0.1rem;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
   }
 
-  .discarded:last-child {
-    box-shadow: 0 3px 8px rgba(212, 168, 75, 0.3);
+  .discarded.latest {
+    box-shadow: 0 2px 8px rgba(212, 168, 75, 0.4);
     animation: tileAppear 0.3s ease-out;
   }
 
   @keyframes tileAppear {
     from {
       opacity: 0;
-      transform: scale(0.8) translateY(-10px);
+      transform: scale(0.8) translateY(-5px);
     }
     to {
       opacity: 1;
@@ -392,12 +589,12 @@
     }
   }
 
-  /* My area */
+  /* My area (bottom) */
   .my-area {
     background: linear-gradient(180deg, rgba(0, 0, 0, 0.4) 0%, rgba(0, 0, 0, 0.5) 100%);
-    padding: var(--space-sm) var(--space-md);
-    padding-bottom: calc(var(--space-md) + env(safe-area-inset-bottom, 0px));
-    border-top: 1px solid rgba(212, 168, 75, 0.15);
+    padding: var(--space-xs) var(--space-sm);
+    padding-bottom: calc(var(--space-sm) + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid rgba(212, 168, 75, 0.2);
     position: relative;
     z-index: 1;
     flex-shrink: 0;
@@ -405,14 +602,14 @@
 
   .hu-button {
     display: block;
-    margin: 0 auto var(--space-sm);
-    padding: var(--space-sm) var(--space-xl);
+    margin: 0 auto var(--space-xs);
+    padding: var(--space-xs) var(--space-lg);
     background: linear-gradient(135deg, #ffd700 0%, #b8860b 100%);
     color: #1a0f0a;
     border: none;
     border-radius: var(--radius-lg);
     font-family: var(--font-display);
-    font-size: 1.5rem;
+    font-size: 1.2rem;
     font-weight: 700;
     cursor: pointer;
     animation: huPulse 1s ease-in-out infinite;
@@ -433,13 +630,13 @@
     display: flex;
     gap: var(--space-sm);
     justify-content: center;
-    margin-bottom: var(--space-sm);
+    margin-bottom: var(--space-xs);
     flex-wrap: wrap;
   }
 
   .meld-tile-img {
-    width: clamp(1.2rem, 4vw, 1.8rem);
-    height: clamp(1.7rem, 5.5vw, 2.5rem);
+    width: clamp(1rem, 3.5vw, 1.5rem);
+    height: clamp(1.4rem, 5vw, 2rem);
     background: linear-gradient(180deg, var(--tile-face) 0%, var(--tile-shadow) 100%);
     border-radius: 3px;
     padding: 2px;
@@ -450,77 +647,57 @@
     display: flex;
     justify-content: center;
     gap: 4px;
-    margin-bottom: var(--space-sm);
+    margin-bottom: var(--space-xs);
   }
 
   .bonus-tile-img {
-    width: clamp(1rem, 3vw, 1.4rem);
-    height: clamp(1.4rem, 4vw, 2rem);
+    width: clamp(0.9rem, 2.5vw, 1.2rem);
+    height: clamp(1.2rem, 3.5vw, 1.7rem);
     background: linear-gradient(180deg, var(--tile-face) 0%, var(--tile-shadow) 100%);
     border-radius: 2px;
     padding: 1px;
     object-fit: contain;
   }
 
-  /* Responsive styles */
-  @media (max-width: 600px) {
-    header {
-      padding: var(--space-xs) var(--space-sm);
-    }
-
-    .room-badge {
-      font-size: 0.75rem;
-      padding: 2px var(--space-xs);
-    }
-
-    .wall-count {
-      font-size: 0.75rem;
-    }
-
+  /* Responsive adjustments */
+  @media (max-width: 500px) {
     .table {
-      padding: var(--space-xs) var(--space-sm);
+      grid-template-columns: minmax(50px, auto) 1fr minmax(50px, auto);
     }
 
     .opponent-name {
-      font-size: 0.75rem;
+      display: none;
     }
 
-    .turn-center {
-      padding: var(--space-sm);
+    .hand-backs {
+      max-width: 100px;
     }
 
-    .turn-wind {
-      font-size: 2.5rem;
+    .hand-backs.vertical {
+      max-height: 100px;
     }
 
-    .turn-name {
-      font-size: 0.75rem;
-    }
-
-    .discard-pile {
+    .discard-pool {
       padding: var(--space-xs);
     }
 
-    .pile-label {
-      font-size: 0.75rem;
-    }
-
     .discarded {
-      font-size: 1.1rem;
+      font-size: 0.85rem;
+    }
+  }
+
+  @media (min-width: 768px) {
+    .table {
+      padding: var(--space-sm);
+      gap: var(--space-sm);
     }
 
-    .my-area {
-      padding: var(--space-xs) var(--space-sm);
-      padding-bottom: calc(var(--space-sm) + env(safe-area-inset-bottom, 0px));
+    .turn-wind {
+      font-size: 3.5rem;
     }
 
-    .hu-button {
-      font-size: 1.2rem;
-      padding: var(--space-xs) var(--space-lg);
-    }
-
-    .meld-label {
-      font-size: 0.5rem;
+    .discard-pool {
+      max-width: 500px;
     }
   }
 </style>

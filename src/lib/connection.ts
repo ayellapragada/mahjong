@@ -1,5 +1,7 @@
 import type { ClientAction, ServerMessage, ClientGameState, Seat, ScoreBreakdown, TileInstance, Meld } from "../game/types";
 
+export type ViewMode = "player" | "table";
+
 export type ConnectionState =
   | { status: "disconnected" }
   | { status: "connecting" }
@@ -8,7 +10,8 @@ export type ConnectionState =
 
 export type ConnectionStore = {
   state: ConnectionState;
-  connect: (roomId: string) => void;
+  viewMode: ViewMode;
+  connect: (roomId: string, viewMode?: ViewMode) => void;
   disconnect: () => void;
   send: (action: ClientAction) => void;
 };
@@ -16,17 +19,19 @@ export type ConnectionStore = {
 export function createConnection(onUpdate: (state: ConnectionState) => void): ConnectionStore {
   let socket: WebSocket | null = null;
   let currentState: ConnectionState = { status: "disconnected" };
+  let currentViewMode: ViewMode = "player";
 
   function setState(newState: ConnectionState) {
     currentState = newState;
     onUpdate(newState);
   }
 
-  function connect(roomId: string) {
+  function connect(roomId: string, viewMode: ViewMode = "player") {
     if (socket) {
       socket.close();
     }
 
+    currentViewMode = viewMode;
     setState({ status: "connecting" });
 
     // partyserver URL pattern: /parties/<class-name>/<room-id>
@@ -34,7 +39,8 @@ export function createConnection(onUpdate: (state: ConnectionState) => void): Co
       ? "ws://localhost:8787"
       : "wss://mahjong.ayellapragada.workers.dev"; // Update after deploy
 
-    const wsUrl = `${baseUrl}/parties/mahjong-room/${roomId}`;
+    // Add viewMode as query param so server knows this is a table-only connection
+    const wsUrl = `${baseUrl}/parties/mahjong-room/${roomId}?mode=${viewMode}`;
     socket = new WebSocket(wsUrl);
 
     socket.addEventListener("open", () => {
@@ -113,6 +119,7 @@ export function createConnection(onUpdate: (state: ConnectionState) => void): Co
 
   return {
     get state() { return currentState; },
+    get viewMode() { return currentViewMode; },
     connect,
     disconnect,
     send,

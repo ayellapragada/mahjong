@@ -1,26 +1,37 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import type { Seat, ScoreBreakdown } from "./game/types";
-  import { createConnection, type ConnectionState } from "./lib/connection";
+  import { createConnection, type ConnectionState, type ViewMode } from "./lib/connection";
   import HomeView from "./views/HomeView.svelte";
   import LobbyView from "./views/LobbyView.svelte";
   import GameView from "./views/GameView.svelte";
+  import TableView from "./views/TableView.svelte";
+  import PlayerHandView from "./views/PlayerHandView.svelte";
   import ResultsModal from "./components/ResultsModal.svelte";
 
   let connectionState: ConnectionState = $state({ status: "disconnected" });
+  let viewMode: ViewMode = $state("player");
 
   const connection = createConnection((newState) => {
     connectionState = newState;
   });
 
-  // Check for room code in URL on mount
+  // Check for room code and view mode in URL on mount
   onMount(() => {
     const params = new URLSearchParams(window.location.search);
     const roomCode = params.get("room");
+    const mode = params.get("mode") as ViewMode | null;
+
+    // Set view mode from URL (table for iPad, player for phones)
+    if (mode === "table" || mode === "player") {
+      viewMode = mode;
+    }
+
     if (roomCode && roomCode.length === 4) {
-      connection.connect(roomCode.toUpperCase());
-      // Clear the URL param
-      window.history.replaceState({}, "", window.location.pathname);
+      connection.connect(roomCode.toUpperCase(), viewMode);
+      // Clear the URL params but keep mode for reference
+      const newUrl = mode ? `${window.location.pathname}?mode=${mode}` : window.location.pathname;
+      window.history.replaceState({}, "", newUrl);
     }
   });
 
@@ -31,11 +42,11 @@
     for (let i = 0; i < 4; i++) {
       roomId += chars[Math.floor(Math.random() * chars.length)];
     }
-    connection.connect(roomId);
+    connection.connect(roomId, viewMode);
   }
 
   function handleJoinRoom(roomCode: string) {
-    connection.connect(roomCode);
+    connection.connect(roomCode, viewMode);
   }
 
   function handleTakeSeat(name: string, seat: Seat) {
@@ -93,19 +104,34 @@
       </div>
     </div>
   {:else if connectionState.status === "connected"}
-    <LobbyView
-      roomCode={connectionState.roomCode}
-      players={connectionState.players}
-      onTakeSeat={handleTakeSeat}
-      onStartGame={handleStartGame}
-      onLeave={handleLeave}
-    />
+    {#if viewMode === "table"}
+      <!-- Table mode skips lobby, waits for game to start -->
+      <div class="table-waiting">
+        <div class="room-badge">{connectionState.roomCode}</div>
+        <p>Waiting for game to start...</p>
+        <p class="hint">Players join on their phones</p>
+      </div>
+    {:else}
+      <LobbyView
+        roomCode={connectionState.roomCode}
+        players={connectionState.players}
+        onTakeSeat={handleTakeSeat}
+        onStartGame={handleStartGame}
+        onLeave={handleLeave}
+      />
+    {/if}
   {:else if connectionState.status === "playing"}
-    <GameView
-      state={connectionState.state}
-      onDiscard={handleDiscard}
-      onCall={handleCall}
-    />
+    {#if viewMode === "table"}
+      <!-- iPad table view: shows shared game state -->
+      <TableView state={connectionState.state} />
+    {:else}
+      <!-- Phone player view: shows hand only -->
+      <PlayerHandView
+        state={connectionState.state}
+        onDiscard={handleDiscard}
+        onCall={handleCall}
+      />
+    {/if}
     {#if connectionState.gameOver}
       <ResultsModal
         winner={connectionState.gameOver.winner}
@@ -246,6 +272,36 @@
     margin-top: var(--space-md);
     letter-spacing: 0.1em;
     text-transform: uppercase;
+  }
+
+  .table-waiting {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    height: 100dvh;
+    background: radial-gradient(ellipse at center, var(--bg-felt) 0%, var(--bg-deep) 100%);
+    gap: var(--space-lg);
+  }
+
+  .table-waiting .room-badge {
+    font-family: 'Crimson Pro', Georgia, serif;
+    font-size: 4rem;
+    color: var(--gold);
+    letter-spacing: 0.2em;
+    text-shadow: 0 0 30px rgba(212, 168, 75, 0.5);
+  }
+
+  .table-waiting p {
+    font-family: var(--font-body);
+    font-size: 1.5rem;
+    color: var(--text-secondary);
+  }
+
+  .table-waiting .hint {
+    font-size: 1rem;
+    color: var(--text-muted);
   }
 
   @keyframes pulse {
