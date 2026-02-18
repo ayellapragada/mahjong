@@ -33,7 +33,7 @@
 
 <style>
   .tile {
-    padding: 0.2rem;
+    padding: clamp(0.1rem, 0.5vw, 0.2rem);
     border: 2px solid var(--tile-border);
     border-radius: var(--radius-md);
     background: linear-gradient(180deg, var(--tile-face) 0%, var(--tile-shadow) 100%);
@@ -44,8 +44,8 @@
       0 1px 2px rgba(0, 0, 0, 0.15),
       inset 0 1px 0 rgba(255, 255, 255, 0.7),
       inset 0 -1px 0 rgba(0, 0, 0, 0.05);
-    min-width: 2.4rem;
-    min-height: 3.4rem;
+    min-width: var(--tile-width);
+    min-height: var(--tile-height);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -53,8 +53,8 @@
   }
 
   .tile-svg {
-    width: 2.2rem;
-    height: 3rem;
+    width: var(--tile-svg-width);
+    height: var(--tile-svg-height);
     object-fit: contain;
     pointer-events: none;
   }
@@ -126,17 +126,6 @@
   }
 
   @media (max-width: 600px) {
-    .tile {
-      padding: 0.15rem;
-      min-width: 1.8rem;
-      min-height: 2.5rem;
-    }
-
-    .tile-svg {
-      width: 1.6rem;
-      height: 2.2rem;
-    }
-
     .tile-number {
       font-size: 0.5rem;
       top: 1px;

@@ -149,6 +149,9 @@
     --font-display: 'Crimson Pro', Georgia, serif;
     --font-body: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
 
+    /* Responsive scale factor - scales down on larger screens */
+    --scale: clamp(0.6, calc(100vw / 800), 1);
+
     /* Core palette - Rosewood parlor */
     --bg-deep: #1a0f0a;
     --bg-table: #0d2818;
@@ -167,6 +170,7 @@
     --jade-glow: rgba(45, 134, 89, 0.3);
     --red-accent: #c94040;
     --red-bright: #e05050;
+    --crimson: #c41e3a;
 
     /* Tile colors */
     --tile-face: #faf6e9;
@@ -202,6 +206,12 @@
     --radius-md: 8px;
     --radius-lg: 12px;
     --radius-xl: 16px;
+
+    /* Tile dimensions - responsive */
+    --tile-width: clamp(1.6rem, 5vw, 2.4rem);
+    --tile-height: clamp(2.2rem, 7vw, 3.4rem);
+    --tile-svg-width: clamp(1.4rem, 4.5vw, 2.2rem);
+    --tile-svg-height: clamp(2rem, 6vw, 3rem);
   }
 
   main {

@@ -150,11 +150,13 @@
 <style>
   .game {
     height: 100vh;
+    height: 100dvh;
     display: flex;
     flex-direction: column;
     background: linear-gradient(180deg, var(--bg-table) 0%, var(--bg-felt) 50%, var(--bg-table) 100%);
     color: var(--text-primary);
     position: relative;
+    overflow: hidden;
   }
 
   .game::before {
@@ -178,6 +180,7 @@
     border-bottom: 1px solid rgba(212, 168, 75, 0.2);
     position: relative;
     z-index: 1;
+    flex-shrink: 0;
   }
 
   .room-info {
@@ -268,7 +271,7 @@
 
   .bonus-tiles, .my-bonus {
     margin-top: var(--space-sm);
-    font-size: 1.8rem;
+    font-size: clamp(1.2rem, 3.5vw, 1.6rem);
   }
 
   .bonus {
@@ -294,23 +297,23 @@
 
   .pile-label {
     font-family: var(--font-display);
-    font-size: 1.1rem;
-    margin-bottom: var(--space-xs);
+    font-size: clamp(0.8rem, 2.5vw, 1rem);
+    margin-bottom: 2px;
     color: var(--text-secondary);
   }
 
   .pile-tiles {
     display: flex;
     flex-wrap: wrap;
-    gap: 3px;
-    min-height: 2.5rem;
+    gap: 2px;
+    min-height: clamp(1.5rem, 4vw, 2rem);
   }
 
   .discarded {
-    font-size: 1.75rem;
+    font-size: clamp(1rem, 3.5vw, 1.5rem);
     background: linear-gradient(180deg, var(--tile-face) 0%, var(--tile-shadow) 100%);
     border-radius: var(--radius-sm);
-    padding: 0.1rem 0.2rem;
+    padding: 0.05rem 0.1rem;
     box-shadow:
       0 2px 4px rgba(0, 0, 0, 0.2),
       inset 0 1px 0 rgba(255, 255, 255, 0.5);
@@ -338,9 +341,11 @@
   .my-area {
     background: linear-gradient(180deg, rgba(0, 0, 0, 0.5) 0%, rgba(0, 0, 0, 0.6) 100%);
     padding: var(--space-md);
+    padding-bottom: calc(var(--space-md) + env(safe-area-inset-bottom, 0px));
     border-top: 1px solid rgba(212, 168, 75, 0.2);
     position: relative;
     z-index: 1;
+    flex-shrink: 0;
   }
 
   .my-info {
@@ -424,10 +429,10 @@
   }
 
   .meld-tile {
-    font-size: 1.4rem;
+    font-size: clamp(0.9rem, 3vw, 1.2rem);
     background: linear-gradient(180deg, var(--tile-face) 0%, var(--tile-shadow) 100%);
     border-radius: 3px;
-    padding: 0.08rem 0.18rem;
+    padding: 0.05rem 0.12rem;
     box-shadow: 0 2px 3px rgba(0, 0, 0, 0.15);
   }
 
@@ -493,6 +498,7 @@
 
     .my-area {
       padding: var(--space-sm);
+      padding-bottom: calc(var(--space-sm) + env(safe-area-inset-bottom, 0px));
     }
 
     .my-info {

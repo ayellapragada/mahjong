@@ -110,6 +110,7 @@
     align-items: center;
     justify-content: center;
     z-index: 200;
+    padding: var(--space-sm);
     animation: fadeIn 0.3s ease;
   }
 
@@ -121,12 +122,12 @@
   .modal {
     background: linear-gradient(145deg, var(--bg-table) 0%, var(--bg-felt) 100%);
     border: 2px solid var(--gold);
-    border-radius: var(--radius-xl);
-    padding: var(--space-lg);
-    max-width: 90vw;
-    max-height: 90vh;
+    border-radius: var(--radius-lg);
+    padding: var(--space-md);
+    width: min(400px, calc(100vw - 2rem));
+    max-height: calc(100vh - 2rem);
     overflow-y: auto;
-    box-shadow: 0 0 60px rgba(212, 168, 75, 0.4);
+    box-shadow: 0 0 40px rgba(212, 168, 75, 0.3);
     animation: slideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 
@@ -137,31 +138,31 @@
 
   .winner-banner, .draw-banner {
     text-align: center;
-    margin-bottom: var(--space-lg);
-    padding: var(--space-md) var(--space-lg);
+    margin-bottom: var(--space-md);
+    padding: var(--space-sm) var(--space-md);
     background: linear-gradient(135deg, rgba(212, 168, 75, 0.25) 0%, rgba(184, 134, 11, 0.15) 100%);
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius-md);
     border: 1px solid rgba(212, 168, 75, 0.3);
   }
 
   .winner-banner .wind {
-    font-size: 2.5rem;
+    font-size: 1.8rem;
     display: block;
-    margin-bottom: var(--space-xs);
+    margin-bottom: 2px;
   }
 
   .winner-banner .name {
     font-family: var(--font-display);
-    font-size: 1.6rem;
+    font-size: 1.1rem;
     color: var(--gold);
     display: block;
   }
 
   .winner-banner .win-type {
     display: block;
-    font-size: 1.3rem;
+    font-size: 0.95rem;
     color: var(--crimson);
-    margin-top: var(--space-sm);
+    margin-top: var(--space-xs);
     font-family: var(--font-display);
   }
 
@@ -171,83 +172,86 @@
   }
 
   .draw-text {
-    font-size: 2.5rem;
+    font-size: 1.8rem;
     display: block;
     color: var(--text-secondary);
   }
 
   .draw-subtitle {
     font-family: var(--font-display);
-    font-size: 1.2rem;
+    font-size: 0.9rem;
     color: var(--text-muted);
     display: block;
-    margin-top: var(--space-xs);
+    margin-top: 2px;
   }
 
   .winning-hand {
     text-align: center;
-    margin-bottom: var(--space-lg);
-    padding: var(--space-md);
+    margin-bottom: var(--space-md);
+    padding: var(--space-sm);
     background: rgba(0, 0, 0, 0.2);
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius-md);
   }
 
   .hand-tiles {
     display: flex;
     justify-content: center;
     flex-wrap: wrap;
-    gap: 6px;
-    margin-bottom: var(--space-sm);
+    gap: 3px;
+    margin-bottom: var(--space-xs);
   }
 
   .tile {
-    font-size: 2.2rem;
+    font-size: 1.4rem;
     background: linear-gradient(180deg, var(--tile-face) 0%, var(--tile-shadow) 100%);
-    border-radius: var(--radius-sm);
-    padding: 0.25rem 0.35rem;
-    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3);
+    border-radius: 3px;
+    padding: 2px 4px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
   }
 
   .melds {
     display: flex;
     justify-content: center;
-    gap: var(--space-md);
-    margin-top: var(--space-md);
-    padding-top: var(--space-md);
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    margin-top: var(--space-sm);
+    padding-top: var(--space-sm);
     border-top: 1px solid rgba(255, 255, 255, 0.1);
   }
 
   .meld {
     display: flex;
-    gap: 3px;
-    padding: var(--space-xs);
+    gap: 2px;
+    padding: 3px;
     background: rgba(255, 255, 255, 0.05);
-    border-radius: var(--radius-sm);
+    border-radius: 3px;
   }
 
   .meld-tile {
-    font-size: 1.6rem !important;
+    font-size: 1.1rem !important;
+    padding: 1px 3px !important;
   }
 
   .scoring {
-    margin-bottom: var(--space-lg);
+    margin-bottom: var(--space-md);
   }
 
   .scoring h3, .scores h3 {
     font-family: var(--font-display);
     color: var(--gold);
-    margin-bottom: var(--space-sm);
+    margin-bottom: var(--space-xs);
     text-align: center;
-    font-size: 1.2rem;
+    font-size: 0.95rem;
   }
 
   .scoring table {
     width: 100%;
     border-collapse: collapse;
+    font-size: 0.85rem;
   }
 
   .scoring td {
-    padding: var(--space-xs) var(--space-sm);
+    padding: 4px var(--space-xs);
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   }
 
@@ -270,20 +274,20 @@
     border-top: 2px solid var(--gold);
     border-bottom: none;
     color: var(--gold);
-    padding-top: var(--space-sm);
+    padding-top: var(--space-xs);
   }
 
   .score-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: var(--space-sm);
+    gap: var(--space-xs);
   }
 
   .score-item {
     text-align: center;
-    padding: var(--space-sm);
+    padding: var(--space-xs);
     background: rgba(0, 0, 0, 0.25);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-sm);
     border: 1px solid transparent;
   }
 
@@ -294,13 +298,13 @@
 
   .seat {
     display: block;
-    font-size: 1.3rem;
-    margin-bottom: var(--space-xs);
+    font-size: 1rem;
+    margin-bottom: 2px;
   }
 
   .score {
     font-family: var(--font-display);
-    font-size: 1.15rem;
+    font-size: 0.85rem;
     font-weight: 600;
   }
 
@@ -315,56 +319,55 @@
   .next-round-btn {
     display: block;
     width: 100%;
-    padding: var(--space-md);
-    margin-top: var(--space-lg);
+    padding: var(--space-sm) var(--space-md);
+    margin-top: var(--space-md);
     background: linear-gradient(135deg, var(--gold) 0%, #b8860b 100%);
     color: var(--bg-dark);
     border: none;
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius-md);
     font-family: var(--font-display);
-    font-size: 1.25rem;
+    font-size: 1rem;
     font-weight: 700;
     cursor: pointer;
     transition: all 0.2s ease;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.05em;
   }
 
   .next-round-btn:hover {
     transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(212, 168, 75, 0.5);
+    box-shadow: 0 4px 16px rgba(212, 168, 75, 0.5);
   }
 
-  @media (max-width: 600px) {
+  /* Small mobile screens */
+  @media (max-width: 380px) {
     .modal {
-      padding: var(--space-md);
-      margin: var(--space-sm);
+      padding: var(--space-sm);
     }
 
     .winner-banner .wind, .draw-text {
-      font-size: 2rem;
+      font-size: 1.5rem;
     }
 
     .winner-banner .name {
-      font-size: 1.3rem;
+      font-size: 1rem;
     }
 
     .tile {
-      font-size: 1.6rem;
-      padding: 0.15rem 0.25rem;
+      font-size: 1.2rem;
+      padding: 1px 3px;
     }
 
     .meld-tile {
-      font-size: 1.3rem !important;
+      font-size: 1rem !important;
     }
 
     .score-grid {
       grid-template-columns: repeat(2, 1fr);
     }
 
-    .next-round-btn {
-      font-size: 1.1rem;
-      padding: var(--space-sm) var(--space-md);
+    .scoring table {
+      font-size: 0.8rem;
     }
   }
 </style>
