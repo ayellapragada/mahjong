@@ -75,9 +75,7 @@
   }
 
   function handleNextRound() {
-    // TODO: Implement START_NEXT_ROUND in Task 11
-    // For now, just disconnect to return to lobby
-    connection.disconnect();
+    connection.send({ type: "START_NEXT_ROUND" });
   }
 </script>
 

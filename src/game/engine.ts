@@ -185,6 +185,98 @@ export function startGame(state: GameState, ruleset: Ruleset): GameState | { err
   };
 }
 
+/**
+ * Start the next round after a win or draw.
+ * Keeps scores, rotates dealer if winner wasn't dealer.
+ */
+export function startNextRound(state: GameState, ruleset: Ruleset, winnerSeat?: Seat): GameState | { error: string } {
+  if (state.phase !== 'finished') {
+    return { error: 'Game not finished' };
+  }
+
+  // Determine new dealer: if dealer won, they stay; otherwise rotate
+  let newDealerSeat = state.dealerSeat;
+  let newHandNumber = state.handNumber;
+  let newRoundNumber = state.roundNumber;
+  let newRoundWind = state.roundWind;
+
+  const dealerWon = winnerSeat === state.dealerSeat;
+
+  if (!dealerWon) {
+    // Rotate dealer
+    newDealerSeat = ((state.dealerSeat + 1) % 4) as Seat;
+
+    if (newDealerSeat === 0) {
+      // Completed a full rotation, advance round wind
+      newHandNumber = 1;
+      newRoundNumber = state.roundNumber + 1;
+      const winds: WindDirection[] = ['east', 'south', 'west', 'north'];
+      const windIndex = winds.indexOf(state.roundWind);
+      newRoundWind = winds[(windIndex + 1) % 4];
+    } else {
+      newHandNumber = state.handNumber + 1;
+    }
+  }
+
+  // Generate and shuffle tiles
+  const allTiles = shuffle(ruleset.generateTileSet());
+
+  // Separate bonus tiles
+  const bonusTiles: TileInstance[] = [];
+  const regularTiles: TileInstance[] = [];
+
+  for (const tile of allTiles) {
+    if (isBonusTile(tile.tile)) {
+      bonusTiles.push(tile);
+    } else {
+      regularTiles.push(tile);
+    }
+  }
+
+  // Deal 13 tiles to each player
+  const hands: TileInstance[][] = [[], [], [], []];
+  for (let i = 0; i < 13; i++) {
+    for (let seat = 0; seat < 4; seat++) {
+      hands[seat].push(regularTiles.shift()!);
+    }
+  }
+
+  // Update players with dealt hands, preserve IDs and names
+  const players = state.players.map(p => ({
+    ...p,
+    hand: sortTiles(hands[p.seat]),
+    melds: [],
+    bonusTiles: [],
+    isDealer: p.seat === newDealerSeat,
+  }));
+
+  // Dead wall gets 14 tiles + bonus tiles
+  const deadWall = [...regularTiles.splice(0, 14), ...bonusTiles];
+
+  return {
+    ...state,
+    phase: 'playing',
+    players,
+    wall: regularTiles,
+    deadWall,
+    currentTurn: newDealerSeat,
+    turnPhase: 'drawing',
+    roundWind: newRoundWind,
+    dealerSeat: newDealerSeat,
+    discardPiles: {
+      0: { tiles: [] },
+      1: { tiles: [] },
+      2: { tiles: [] },
+      3: { tiles: [] },
+    },
+    lastDiscard: undefined,
+    pendingCalls: [],
+    awaitingCallFrom: [],
+    roundNumber: newRoundNumber,
+    handNumber: newHandNumber,
+  };
+}
+
 // ============================================================================
 // DRAWING
 // ============================================================================

@@ -1,11 +1,13 @@
 // party/bot.ts
 import type { Seat, GameState, CallType } from '../src/game/types';
 import { getAvailableCallsForPlayer } from '../src/game/calls';
+import { canDeclareWin } from '../src/game/engine';
 import { getRuleset } from '../src/game/rulesets';
 
 export type BotAction =
   | { type: 'discard'; tileId: string }
   | { type: 'call'; callType: 'chi' | 'peng' | 'gang'; tileIds: string[] }
+  | { type: 'win' }
   | { type: 'pass' };
 
 const SEAT_WIND_NAMES: Record<Seat, string> = {
@@ -45,6 +47,12 @@ export class BotPlayer {
 
     // Check if it's our turn to discard
     if (state.currentTurn === this.seat && state.turnPhase === 'discarding') {
+      // Check for self-draw win first
+      const ruleset = getRuleset(state.rulesetId);
+      if (canDeclareWin(state, this.seat, ruleset)) {
+        return { type: 'win' };
+      }
+
       // Pick a random tile to discard
       const randomIndex = Math.floor(Math.random() * player.hand.length);
       return { type: 'discard', tileId: player.hand[randomIndex].id };
@@ -63,11 +71,17 @@ export class BotPlayer {
         state.lastDiscard.tile,
         this.seat,
         state.lastDiscard.from,
-        ruleset
+        ruleset,
+        player.melds
       );
 
-      // Filter out 'pass' - that's always available implicitly
-      const realCalls = availableCalls.filter(c => c.type !== 'pass');
+      // Always declare win if available
+      if (availableCalls.some(c => c.type === 'win')) {
+        return { type: 'win' };
+      }
+
+      // Filter out 'pass' and 'win' - check other calls
+      const realCalls = availableCalls.filter(c => c.type !== 'pass' && c.type !== 'win');
 
       if (realCalls.length > 0 && Math.random() < 0.5) {
         // 50% chance to make the highest priority call

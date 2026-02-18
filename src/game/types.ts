@@ -193,7 +193,8 @@ export type ClientAction =
   | { type: 'CALL_PENG'; tileIds: [string, string] } // Two tiles from hand
   | { type: 'CALL_GANG'; tileIds: string[] } // 3 from hand (exposed) or 4 (concealed)
   | { type: 'DECLARE_WIN' }
-  | { type: 'PASS' };
+  | { type: 'PASS' }
+  | { type: 'START_NEXT_ROUND' };
 
 // ============================================================================
 // SERVER MESSAGES (server -> client)

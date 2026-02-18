@@ -7,6 +7,7 @@ import {
   addPlayer,
   removePlayer,
   startGame,
+  startNextRound,
   drawTile,
   discardTile,
   getClientState,
@@ -21,6 +22,7 @@ export class MahjongRoom extends Server {
   state!: GameState;
   bots: Map<Seat, BotPlayer> = new Map();
   botTimeouts: Map<Seat, ReturnType<typeof setTimeout>> = new Map();
+  lastWinner?: Seat;
 
   onStart() {
     // Initialize with a generated room code
@@ -86,6 +88,9 @@ export class MahjongRoom extends Server {
         break;
       case "DECLARE_WIN":
         this.handleDeclareWin(sender);
+        break;
+      case "START_NEXT_ROUND":
+        this.handleStartNextRound(sender);
         break;
       default:
         this.sendError(sender, `Unknown action: ${(action as any).type}`);
@@ -183,6 +188,7 @@ export class MahjongRoom extends Server {
     }
 
     this.broadcastGameState();
+    if (this.checkForDraw()) return;
     this.scheduleBotActions();
   }
 
@@ -217,6 +223,7 @@ export class MahjongRoom extends Server {
         const result = declareDiscardWin(this.state, resolved.pendingCalls[0].seat, ruleset);
         if (!("error" in result)) {
           this.state = result.state;
+          this.lastWinner = result.winner;
 
           const winnerPlayer = this.state.players.find(p => p.seat === result.winner);
           for (const c of this.getConnections()) {
@@ -268,6 +275,7 @@ export class MahjongRoom extends Server {
     }
 
     this.broadcastGameState();
+    if (this.checkForDraw()) return;
     this.scheduleBotActions();
   }
 
@@ -297,6 +305,7 @@ export class MahjongRoom extends Server {
     }
 
     this.state = result.state;
+    this.lastWinner = result.winner;
 
     // Broadcast game over with winner info
     const winnerPlayer = this.state.players.find(p => p.seat === result.winner);
@@ -315,6 +324,39 @@ export class MahjongRoom extends Server {
 
     // Also send final state
     this.broadcastGameState();
+  }
+
+  handleStartNextRound(conn: Connection) {
+    const player = this.state.players.find(p => p.id === conn.id);
+    if (!player) {
+      this.sendError(conn, "You are not in this game");
+      return;
+    }
+
+    if (this.state.phase !== 'finished') {
+      this.sendError(conn, "Game not finished");
+      return;
+    }
+
+    const ruleset = getRuleset(this.state.rulesetId);
+    const result = startNextRound(this.state, ruleset, this.lastWinner);
+
+    if ("error" in result) {
+      this.sendError(conn, result.error);
+      return;
+    }
+
+    this.state = result;
+    this.lastWinner = undefined;
+
+    // Dealer draws first tile
+    const drawResult = drawTile(this.state, ruleset);
+    if (!("error" in drawResult)) {
+      this.state = drawResult;
+    }
+
+    this.broadcastGameState();
+    this.scheduleBotActions();
   }
 
   // ============================================================================
@@ -404,6 +446,9 @@ export class MahjongRoom extends Server {
       case 'pass':
         this.handleBotPass(seat);
         break;
+      case 'win':
+        this.handleBotWin(seat);
+        break;
     }
   }
 
@@ -427,6 +472,7 @@ export class MahjongRoom extends Server {
     }
 
     this.broadcastGameState();
+    if (this.checkForDraw()) return;
     this.scheduleBotActions();
   }
 
@@ -451,6 +497,7 @@ export class MahjongRoom extends Server {
     }
 
     this.broadcastGameState();
+    if (this.checkForDraw()) return;
     this.scheduleBotActions();
   }
 
@@ -475,7 +522,48 @@ export class MahjongRoom extends Server {
     }
 
     this.broadcastGameState();
+    if (this.checkForDraw()) return;
     this.scheduleBotActions();
+  }
+
+  handleBotWin(seat: Seat) {
+    const ruleset = getRuleset(this.state.rulesetId);
+
+    // Determine if self-draw or discard win
+    let result;
+    if (this.state.turnPhase === 'discarding' && this.state.currentTurn === seat) {
+      result = declareSelfDrawWin(this.state, seat, ruleset);
+    } else if (this.state.turnPhase === 'waiting_for_calls') {
+      result = declareDiscardWin(this.state, seat, ruleset);
+    } else {
+      console.error(`[${this.state.roomCode}] Bot ${seat} tried to win at invalid time`);
+      return;
+    }
+
+    if ("error" in result) {
+      console.error(`[${this.state.roomCode}] Bot win error:`, result.error);
+      return;
+    }
+
+    this.state = result.state;
+    this.lastWinner = result.winner;
+
+    // Broadcast game over with winner info
+    const winnerPlayer = this.state.players.find(p => p.seat === result.winner);
+    for (const c of this.getConnections()) {
+      this.sendToConnection(c, {
+        type: "GAME_OVER",
+        winner: result.winner,
+        scores: this.state.scores,
+        breakdown: result.breakdown,
+        winnerName: winnerPlayer?.name ?? '',
+        winningHand: winnerPlayer?.hand ?? [],
+        winningMelds: winnerPlayer?.melds ?? [],
+        isSelfDrawn: result.isSelfDrawn,
+      });
+    }
+
+    this.broadcastGameState();
   }
 
   // ============================================================================
@@ -523,6 +611,26 @@ export class MahjongRoom extends Server {
 
   sendToConnection(conn: Connection, message: ServerMessage) {
     conn.send(JSON.stringify(message));
+  }
+
+  checkForDraw(): boolean {
+    if (this.state.phase === 'finished' && this.state.turnPhase === 'game_over' && this.lastWinner === undefined) {
+      // Wall exhausted - broadcast draw
+      for (const c of this.getConnections()) {
+        this.sendToConnection(c, {
+          type: "GAME_OVER",
+          winner: -1,
+          scores: { 0: 0, 1: 0, 2: 0, 3: 0 }, // No score changes
+          breakdown: { fan: 0, items: [], basePoints: 0, totalPoints: 0 },
+          winnerName: '',
+          winningHand: [],
+          winningMelds: [],
+          isSelfDrawn: false,
+        });
+      }
+      return true;
+    }
+    return false;
   }
 
   sendError(conn: Connection, message: string) {
