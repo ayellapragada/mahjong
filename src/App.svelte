@@ -68,7 +68,16 @@
       case "pass":
         connection.send({ type: "PASS" });
         break;
+      case "win":
+        connection.send({ type: "DECLARE_WIN" });
+        break;
     }
+  }
+
+  function handleNextRound() {
+    // TODO: Implement START_NEXT_ROUND in Task 11
+    // For now, just disconnect to return to lobby
+    connection.disconnect();
   }
 </script>
 
@@ -99,6 +108,18 @@
       onDiscard={handleDiscard}
       onCall={handleCall}
     />
+    {#if connectionState.gameOver}
+      <ResultsModal
+        winner={connectionState.gameOver.winner}
+        winnerName={connectionState.gameOver.winnerName}
+        breakdown={connectionState.gameOver.breakdown}
+        scores={connectionState.gameOver.scores}
+        winningHand={connectionState.gameOver.winningHand}
+        winningMelds={connectionState.gameOver.winningMelds}
+        isSelfDrawn={connectionState.gameOver.isSelfDrawn}
+        onNextRound={handleNextRound}
+      />
+    {/if}
   {/if}
 </main>
 

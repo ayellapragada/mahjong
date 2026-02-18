@@ -203,7 +203,7 @@ export type ServerMessage =
   | { type: 'STATE_UPDATE'; state: ClientGameState }
   | { type: 'ROOM_INFO'; roomCode: string; players: Array<{ name: string; seat: Seat }> }
   | { type: 'ERROR'; message: string }
-  | { type: 'GAME_OVER'; winner: Seat; scores: Record<Seat, number>; breakdown: ScoreBreakdown };
+  | { type: 'GAME_OVER'; winner: Seat | -1; scores: Record<Seat, number>; breakdown: ScoreBreakdown; winnerName: string; winningHand: TileInstance[]; winningMelds: Meld[]; isSelfDrawn: boolean };
 
 // ============================================================================
 // SCORING TYPES

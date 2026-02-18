@@ -50,10 +50,10 @@ Hong Kong (Cantonese) mahjong as default, with ruleset abstraction for future va
 - [x] Update server to manage call windows
 
 ### Slice 6: Win detection + scoring UI
-- [ ] Integrate win detection into game flow
-- [ ] Scoring display at end of round
-- [ ] Handle draws (exhausted wall)
-- [ ] Multi-round game tracking
+- [x] Integrate win detection into game flow
+- [x] Scoring display at end of round
+- [x] Handle draws (exhausted wall)
+- [x] Multi-round game tracking
 
 ## Running Locally
 
@@ -79,7 +79,7 @@ npm run deploy
 
 ## Current Status
 
-Slices 1-5 complete. Call system works:
+Slices 1-6 complete. Full game loop works:
 - Create/join rooms with 4-character codes
 - QR code scanning to join
 - Seat selection in lobby
@@ -107,7 +107,14 @@ UI/Design overhaul completed:
 - Fully responsive design for mobile devices (scales down tiles, buttons, layouts)
 - Global CSS variables for consistent theming
 
+Win detection & scoring:
+- Self-draw and discard win detection
+- ResultsModal with scoring breakdown
+- Score transfers (discarder pays double)
+- Multi-round play with dealer rotation
+- Draw handling on wall exhaustion
+
 ## Next Steps
 
-1. Implement Slice 6 (win detection UI, scoring display)
-2. Polish: sound effects, haptic feedback
+1. Polish: sound effects, haptic feedback
+2. SVG tile graphics (better contrast than Unicode)

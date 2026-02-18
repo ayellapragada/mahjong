@@ -218,12 +218,17 @@ export class MahjongRoom extends Server {
         if (!("error" in result)) {
           this.state = result.state;
 
+          const winnerPlayer = this.state.players.find(p => p.seat === result.winner);
           for (const c of this.getConnections()) {
             this.sendToConnection(c, {
               type: "GAME_OVER",
               winner: result.winner,
               scores: this.state.scores,
               breakdown: result.breakdown,
+              winnerName: winnerPlayer?.name ?? '',
+              winningHand: winnerPlayer?.hand ?? [],
+              winningMelds: winnerPlayer?.melds ?? [],
+              isSelfDrawn: result.isSelfDrawn,
             });
           }
         }
@@ -294,12 +299,17 @@ export class MahjongRoom extends Server {
     this.state = result.state;
 
     // Broadcast game over with winner info
+    const winnerPlayer = this.state.players.find(p => p.seat === result.winner);
     for (const c of this.getConnections()) {
       this.sendToConnection(c, {
         type: "GAME_OVER",
         winner: result.winner,
         scores: this.state.scores,
         breakdown: result.breakdown,
+        winnerName: winnerPlayer?.name ?? '',
+        winningHand: winnerPlayer?.hand ?? [],
+        winningMelds: winnerPlayer?.melds ?? [],
+        isSelfDrawn: result.isSelfDrawn,
       });
     }
 

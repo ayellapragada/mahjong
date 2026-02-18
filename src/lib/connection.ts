@@ -1,10 +1,10 @@
-import type { ClientAction, ServerMessage, ClientGameState, Seat, ScoreBreakdown } from "../game/types";
+import type { ClientAction, ServerMessage, ClientGameState, Seat, ScoreBreakdown, TileInstance, Meld } from "../game/types";
 
 export type ConnectionState =
   | { status: "disconnected" }
   | { status: "connecting" }
   | { status: "connected"; roomCode: string; players: Array<{ name: string; seat: Seat }> }
-  | { status: "playing"; state: ClientGameState; gameOver?: { winner: Seat | -1; scores: Record<Seat, number>; breakdown: ScoreBreakdown } };
+  | { status: "playing"; state: ClientGameState; gameOver?: { winner: Seat | -1; scores: Record<Seat, number>; breakdown: ScoreBreakdown; winnerName: string; winningHand: TileInstance[]; winningMelds: Meld[]; isSelfDrawn: boolean } };
 
 export type ConnectionStore = {
   state: ConnectionState;
@@ -68,6 +68,10 @@ export function createConnection(onUpdate: (state: ConnectionState) => void): Co
                 winner: message.winner,
                 scores: message.scores,
                 breakdown: message.breakdown,
+                winnerName: message.winnerName,
+                winningHand: message.winningHand,
+                winningMelds: message.winningMelds,
+                isSelfDrawn: message.isSelfDrawn,
               },
             });
           }
