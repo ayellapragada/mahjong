@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { ClientGameState } from "../game/types";
-  import { SEAT_NAMES, SEAT_WINDS, tileToUnicode } from "../lib/tiles";
+  import type { ClientGameState, Meld } from "../game/types";
+  import { SEAT_NAMES, SEAT_WINDS, tileToUnicode, tileToSvgPath } from "../lib/tiles";
   import Hand from "../components/Hand.svelte";
   import CallPrompt from "../components/CallPrompt.svelte";
 
@@ -12,6 +12,9 @@
 
   let { state, onDiscard, onCall }: Props = $props();
 
+  // Wind characters for turn indicator
+  const WIND_CHARS = ['東', '南', '西', '北'] as const;
+
   let isMyTurn = $derived(state.currentTurn === state.mySeat);
   let canDiscard = $derived(isMyTurn && state.turnPhase === "discarding");
   let canWin = $derived(state.canWin);
@@ -19,53 +22,46 @@
     state.turnPhase === "waiting_for_calls" &&
     state.availableCalls.length > 0
   );
+
+  // Get meld type label
+  function getMeldLabel(meld: Meld): string {
+    switch (meld.type) {
+      case 'chi': return 'CHI';
+      case 'peng': return 'PENG';
+      case 'gang': return 'GANG';
+      default: return '';
+    }
+  }
 </script>
 
 <div class="game">
   <header>
-    <div class="room-info">
-      Room: <strong>{state.roomCode}</strong>
-    </div>
-    <div class="round-info">
-      Round {state.roundNumber} · {SEAT_NAMES[state.dealerSeat]} Dealer
-    </div>
-    <div class="wall-info">
-      Wall: {state.wallCount} tiles
-    </div>
+    <div class="room-badge">{state.roomCode}</div>
+    <div class="wall-count">{state.wallCount} tiles</div>
   </header>
 
   <div class="table">
-    <!-- Other players -->
-    <div class="other-players">
+    <!-- Other players with exposed melds -->
+    <div class="opponents">
       {#each state.otherPlayers as player}
-        <div
-          class="player-info"
-          class:current-turn={state.currentTurn === player.seat}
-        >
-          <div class="player-header">
-            {SEAT_WINDS[player.seat]} {player.name}
+        <div class="opponent" class:current-turn={state.currentTurn === player.seat}>
+          <div class="opponent-name">
+            {WIND_CHARS[player.seat]} {player.name}
             {#if player.isDealer}
               <span class="dealer-badge">莊</span>
             {/if}
           </div>
-          <div class="player-stats">
-            {player.handCount} tiles
-          </div>
           {#if player.melds.length > 0}
-            <div class="melds">
+            <div class="opponent-melds">
               {#each player.melds as meld}
-                <div class="meld">
-                  {#each meld.tiles as tile}
-                    <span class="meld-tile">{tileToUnicode(tile.tile)}</span>
-                  {/each}
+                <div class="labeled-meld">
+                  <span class="meld-label">{getMeldLabel(meld)}</span>
+                  <div class="meld-tiles">
+                    {#each meld.tiles as tile}
+                      <img src={tileToSvgPath(tile.tile)} alt="" class="mini-tile" />
+                    {/each}
+                  </div>
                 </div>
-              {/each}
-            </div>
-          {/if}
-          {#if player.bonusTiles.length > 0}
-            <div class="bonus-tiles">
-              {#each player.bonusTiles as bonus}
-                <span class="bonus">{tileToUnicode(bonus.tile)}</span>
               {/each}
             </div>
           {/if}
@@ -73,12 +69,26 @@
       {/each}
     </div>
 
+    <!-- Central turn indicator -->
+    <div class="turn-center">
+      <div class="turn-wind" class:active={true}>
+        {WIND_CHARS[state.currentTurn]}
+      </div>
+      <div class="turn-name">
+        {#if isMyTurn}
+          Your Turn
+        {:else}
+          {state.otherPlayers.find(p => p.seat === state.currentTurn)?.name || SEAT_NAMES[state.currentTurn]}
+        {/if}
+      </div>
+    </div>
+
     <!-- Discard piles -->
     <div class="discard-area">
       {#each [0, 1, 2, 3] as seatNum}
         {@const seat = seatNum as 0 | 1 | 2 | 3}
-        <div class="discard-pile">
-          <div class="pile-label">{SEAT_WINDS[seat]}</div>
+        <div class="discard-pile" class:current={state.currentTurn === seat}>
+          <div class="pile-label">{WIND_CHARS[seat]}</div>
           <div class="pile-tiles">
             {#each state.discardPiles[seat].tiles as tile}
               <span class="discarded">{tileToUnicode(tile.tile)}</span>
@@ -89,45 +99,34 @@
     </div>
   </div>
 
-  <!-- My info & hand -->
+  <!-- My area -->
   <div class="my-area">
-    <div class="my-info">
-      <strong>{SEAT_WINDS[state.mySeat]} {SEAT_NAMES[state.mySeat]}</strong>
-      {#if state.dealerSeat === state.mySeat}
-        <span class="dealer-badge">莊</span>
-      {/if}
-      <span class="turn-indicator" class:my-turn={isMyTurn}>
-        {#if isMyTurn}
-          {state.turnPhase === "discarding" ? "Your turn - discard a tile" : `Your turn - ${state.turnPhase}`}
-        {:else}
-          Waiting for {SEAT_NAMES[state.currentTurn]}
-        {/if}
-      </span>
-    </div>
-
     {#if canWin}
       <button class="hu-button" onclick={() => onCall('win', [])}>
         胡 Hu!
       </button>
     {/if}
 
-    {#if state.myBonusTiles.length > 0}
-      <div class="my-bonus">
-        Bonus:
-        {#each state.myBonusTiles as bonus}
-          <span class="bonus">{tileToUnicode(bonus.tile)}</span>
+    <!-- My exposed melds with labels -->
+    {#if state.myMelds.length > 0}
+      <div class="my-melds">
+        {#each state.myMelds as meld}
+          <div class="labeled-meld">
+            <span class="meld-label">{getMeldLabel(meld)}</span>
+            <div class="meld-tiles">
+              {#each meld.tiles as tile}
+                <img src={tileToSvgPath(tile.tile)} alt="" class="meld-tile-img" />
+              {/each}
+            </div>
+          </div>
         {/each}
       </div>
     {/if}
 
-    {#if state.myMelds.length > 0}
-      <div class="my-melds">
-        {#each state.myMelds as meld}
-          <div class="meld">
-            {#each meld.tiles as tile}
-              <span class="meld-tile">{tileToUnicode(tile.tile)}</span>
-            {/each}
-          </div>
+    {#if state.myBonusTiles.length > 0}
+      <div class="my-bonus">
+        {#each state.myBonusTiles as bonus}
+          <img src={tileToSvgPath(bonus.tile)} alt="" class="bonus-tile-img" />
         {/each}
       </div>
     {/if}
@@ -163,143 +162,203 @@
     content: '';
     position: absolute;
     inset: 0;
-    background:
-      radial-gradient(ellipse 80% 50% at 50% 40%, rgba(45, 134, 89, 0.15) 0%, transparent 70%),
-      url("data:image/svg+xml,%3Csvg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    background: radial-gradient(ellipse 80% 50% at 50% 40%, rgba(45, 134, 89, 0.15) 0%, transparent 70%);
     pointer-events: none;
   }
 
+  /* Simplified header */
   header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     padding: var(--space-sm) var(--space-md);
-    background: linear-gradient(180deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.3) 100%);
-    font-size: 0.85rem;
-    font-family: var(--font-body);
-    border-bottom: 1px solid rgba(212, 168, 75, 0.2);
     position: relative;
     z-index: 1;
     flex-shrink: 0;
   }
 
-  .room-info {
-    color: var(--text-secondary);
-  }
-
-  .room-info strong {
+  .room-badge {
+    background: rgba(0, 0, 0, 0.4);
     color: var(--gold);
-    font-family: var(--font-display);
-    letter-spacing: 0.15em;
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 0.85rem;
+    letter-spacing: 0.1em;
   }
 
-  .round-info {
-    color: var(--gold);
-    font-weight: 500;
-  }
-
-  .wall-info {
+  .wall-count {
     color: var(--text-muted);
+    font-size: 0.85rem;
+    font-family: var(--font-body);
   }
 
   .table {
     flex: 1;
     display: flex;
     flex-direction: column;
-    padding: var(--space-md);
-    gap: var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    gap: var(--space-sm);
     overflow: auto;
     position: relative;
     z-index: 1;
   }
 
-  .other-players {
+  /* Opponents section */
+  .opponents {
     display: flex;
     justify-content: center;
     flex-wrap: wrap;
     gap: var(--space-sm);
   }
 
-  .player-info {
-    background: linear-gradient(145deg, rgba(0, 0, 0, 0.4) 0%, rgba(0, 0, 0, 0.2) 100%);
-    padding: var(--space-sm) var(--space-md);
-    border-radius: var(--radius-lg);
-    text-align: center;
-    min-width: 130px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
+  .opponent {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: var(--radius-md);
     transition: all 0.3s ease;
   }
 
-  .player-info.current-turn {
-    background: linear-gradient(145deg, rgba(212, 168, 75, 0.25) 0%, rgba(212, 168, 75, 0.1) 100%);
-    border: 2px solid var(--gold);
-    box-shadow:
-      0 0 20px rgba(212, 168, 75, 0.2),
-      inset 0 1px 0 rgba(255, 255, 255, 0.1);
-    animation: glowPulse 2s ease-in-out infinite;
+  .opponent.current-turn {
+    background: rgba(212, 168, 75, 0.15);
+    box-shadow: 0 0 20px rgba(212, 168, 75, 0.2);
   }
 
-  @keyframes glowPulse {
-    0%, 100% { box-shadow: 0 0 20px rgba(212, 168, 75, 0.2); }
-    50% { box-shadow: 0 0 30px rgba(212, 168, 75, 0.35); }
-  }
-
-  .player-header {
-    font-family: var(--font-display);
-    font-size: 1.05rem;
-    font-weight: 500;
-    margin-bottom: var(--space-xs);
-    color: var(--text-primary);
-  }
-
-  .player-stats {
-    font-size: 0.8rem;
-    color: var(--text-muted);
+  .opponent-name {
     font-family: var(--font-body);
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+  }
+
+  .opponent.current-turn .opponent-name {
+    color: var(--gold);
   }
 
   .dealer-badge {
-    background: linear-gradient(135deg, #c41e3a 0%, #8b0000 100%);
+    background: linear-gradient(135deg, var(--crimson) 0%, #8b0000 100%);
     color: white;
-    padding: 0.15rem 0.5rem;
+    padding: 0.1rem 0.4rem;
     border-radius: var(--radius-sm);
-    font-size: 0.75rem;
-    margin-left: var(--space-xs);
+    font-size: 0.65rem;
     font-family: var(--font-display);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
   }
 
-  .bonus-tiles, .my-bonus {
-    margin-top: var(--space-sm);
-    font-size: clamp(1.2rem, 3.5vw, 1.6rem);
+  .opponent-melds {
+    display: flex;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+    justify-content: center;
   }
 
-  .bonus {
-    margin: 0 2px;
-    background: linear-gradient(180deg, var(--tile-face) 0%, var(--tile-shadow) 100%);
+  /* Labeled meld component */
+  .labeled-meld {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .meld-label {
+    font-size: 0.6rem;
+    font-family: var(--font-body);
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .meld-tiles {
+    display: flex;
+    gap: 1px;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 2px;
     border-radius: var(--radius-sm);
-    padding: 0.15rem 0.25rem;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   }
 
+  .mini-tile {
+    width: clamp(1rem, 3vw, 1.4rem);
+    height: clamp(1.4rem, 4vw, 2rem);
+    background: linear-gradient(180deg, var(--tile-face) 0%, var(--tile-shadow) 100%);
+    border-radius: 2px;
+    padding: 1px;
+    object-fit: contain;
+  }
+
+  /* Central turn indicator */
+  .turn-center {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-md);
+  }
+
+  .turn-wind {
+    font-size: clamp(2.5rem, 8vw, 4rem);
+    font-family: var(--font-display);
+    color: var(--gold);
+    text-shadow: 0 0 30px rgba(212, 168, 75, 0.5);
+    line-height: 1;
+  }
+
+  .turn-wind.active {
+    animation: windPulse 2s ease-in-out infinite;
+  }
+
+  @keyframes windPulse {
+    0%, 100% {
+      text-shadow: 0 0 30px rgba(212, 168, 75, 0.5);
+      transform: scale(1);
+    }
+    50% {
+      text-shadow: 0 0 50px rgba(212, 168, 75, 0.8);
+      transform: scale(1.05);
+    }
+  }
+
+  .turn-name {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-family: var(--font-body);
+    margin-top: var(--space-xs);
+  }
+
+  /* Discard area */
   .discard-area {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: var(--space-sm);
+    gap: var(--space-xs);
   }
 
   .discard-pile {
-    background: linear-gradient(145deg, rgba(0, 0, 0, 0.25) 0%, rgba(0, 0, 0, 0.15) 100%);
-    padding: var(--space-sm);
+    background: rgba(0, 0, 0, 0.2);
+    padding: var(--space-xs) var(--space-sm);
     border-radius: var(--radius-md);
-    border: 1px solid rgba(255, 255, 255, 0.03);
+    border: 1px solid transparent;
+    transition: all 0.3s ease;
+  }
+
+  .discard-pile.current {
+    border-color: rgba(212, 168, 75, 0.3);
+    background: rgba(212, 168, 75, 0.05);
   }
 
   .pile-label {
     font-family: var(--font-display);
-    font-size: clamp(0.8rem, 2.5vw, 1rem);
+    font-size: 0.9rem;
     margin-bottom: 2px;
-    color: var(--text-secondary);
+    color: var(--text-muted);
+  }
+
+  .discard-pile.current .pile-label {
+    color: var(--gold);
   }
 
   .pile-tiles {
@@ -310,20 +369,15 @@
   }
 
   .discarded {
-    font-size: clamp(1rem, 3.5vw, 1.5rem);
+    font-size: clamp(1rem, 3.5vw, 1.4rem);
     background: linear-gradient(180deg, var(--tile-face) 0%, var(--tile-shadow) 100%);
     border-radius: var(--radius-sm);
     padding: 0.05rem 0.1rem;
-    box-shadow:
-      0 2px 4px rgba(0, 0, 0, 0.2),
-      inset 0 1px 0 rgba(255, 255, 255, 0.5);
-    transition: transform 0.15s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   }
 
   .discarded:last-child {
-    box-shadow:
-      0 3px 8px rgba(212, 168, 75, 0.3),
-      inset 0 1px 0 rgba(255, 255, 255, 0.5);
+    box-shadow: 0 3px 8px rgba(212, 168, 75, 0.3);
     animation: tileAppear 0.3s ease-out;
   }
 
@@ -338,55 +392,20 @@
     }
   }
 
+  /* My area */
   .my-area {
-    background: linear-gradient(180deg, rgba(0, 0, 0, 0.5) 0%, rgba(0, 0, 0, 0.6) 100%);
-    padding: var(--space-md);
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0.4) 0%, rgba(0, 0, 0, 0.5) 100%);
+    padding: var(--space-sm) var(--space-md);
     padding-bottom: calc(var(--space-md) + env(safe-area-inset-bottom, 0px));
-    border-top: 1px solid rgba(212, 168, 75, 0.2);
+    border-top: 1px solid rgba(212, 168, 75, 0.15);
     position: relative;
     z-index: 1;
     flex-shrink: 0;
   }
 
-  .my-info {
-    text-align: center;
-    margin-bottom: var(--space-sm);
-    font-family: var(--font-display);
-    font-size: 1.1rem;
-  }
-
-  .turn-indicator {
-    display: block;
-    margin-top: var(--space-xs);
-    font-size: 0.85rem;
-    font-family: var(--font-body);
-    color: var(--text-muted);
-    font-weight: 400;
-  }
-
-  .turn-indicator.my-turn {
-    color: var(--gold);
-    font-weight: 600;
-    text-shadow: 0 0 10px rgba(212, 168, 75, 0.5);
-    animation: turnPulse 1.5s ease-in-out infinite;
-  }
-
-  @keyframes turnPulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.7; }
-  }
-
-  .my-bonus {
-    text-align: center;
-    margin-bottom: var(--space-sm);
-    font-family: var(--font-body);
-    font-size: 0.9rem;
-    color: var(--text-secondary);
-  }
-
   .hu-button {
     display: block;
-    margin: var(--space-sm) auto;
+    margin: 0 auto var(--space-sm);
     padding: var(--space-sm) var(--space-xl);
     background: linear-gradient(135deg, #ffd700 0%, #b8860b 100%);
     color: #1a0f0a;
@@ -398,7 +417,6 @@
     cursor: pointer;
     animation: huPulse 1s ease-in-out infinite;
     box-shadow: 0 4px 20px rgba(255, 215, 0, 0.5);
-    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.3);
   }
 
   .hu-button:hover {
@@ -411,76 +429,72 @@
     50% { transform: scale(1.03); }
   }
 
-  .melds {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-sm);
-    margin-top: var(--space-sm);
-    justify-content: center;
-  }
-
-  .meld {
-    display: flex;
-    gap: 2px;
-    background: rgba(255, 255, 255, 0.05);
-    padding: var(--space-xs);
-    border-radius: var(--radius-sm);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-  }
-
-  .meld-tile {
-    font-size: clamp(0.9rem, 3vw, 1.2rem);
-    background: linear-gradient(180deg, var(--tile-face) 0%, var(--tile-shadow) 100%);
-    border-radius: 3px;
-    padding: 0.05rem 0.12rem;
-    box-shadow: 0 2px 3px rgba(0, 0, 0, 0.15);
-  }
-
   .my-melds {
     display: flex;
     gap: var(--space-sm);
     justify-content: center;
     margin-bottom: var(--space-sm);
+    flex-wrap: wrap;
+  }
+
+  .meld-tile-img {
+    width: clamp(1.2rem, 4vw, 1.8rem);
+    height: clamp(1.7rem, 5.5vw, 2.5rem);
+    background: linear-gradient(180deg, var(--tile-face) 0%, var(--tile-shadow) 100%);
+    border-radius: 3px;
+    padding: 2px;
+    object-fit: contain;
+  }
+
+  .my-bonus {
+    display: flex;
+    justify-content: center;
+    gap: 4px;
+    margin-bottom: var(--space-sm);
+  }
+
+  .bonus-tile-img {
+    width: clamp(1rem, 3vw, 1.4rem);
+    height: clamp(1.4rem, 4vw, 2rem);
+    background: linear-gradient(180deg, var(--tile-face) 0%, var(--tile-shadow) 100%);
+    border-radius: 2px;
+    padding: 1px;
+    object-fit: contain;
   }
 
   /* Responsive styles */
   @media (max-width: 600px) {
     header {
-      flex-wrap: wrap;
-      gap: var(--space-xs);
-      justify-content: center;
       padding: var(--space-xs) var(--space-sm);
+    }
+
+    .room-badge {
+      font-size: 0.75rem;
+      padding: 2px var(--space-xs);
+    }
+
+    .wall-count {
       font-size: 0.75rem;
     }
 
     .table {
-      padding: var(--space-sm);
-      gap: var(--space-sm);
-    }
-
-    .player-info {
-      min-width: 100px;
       padding: var(--space-xs) var(--space-sm);
     }
 
-    .player-header {
-      font-size: 0.9rem;
+    .opponent-name {
+      font-size: 0.75rem;
     }
 
-    .player-stats {
-      font-size: 0.7rem;
+    .turn-center {
+      padding: var(--space-sm);
     }
 
-    .bonus-tiles, .my-bonus {
-      font-size: 1.4rem;
+    .turn-wind {
+      font-size: 2.5rem;
     }
 
-    .bonus {
-      padding: 0.1rem 0.15rem;
-    }
-
-    .discard-area {
-      gap: var(--space-xs);
+    .turn-name {
+      font-size: 0.75rem;
     }
 
     .discard-pile {
@@ -488,25 +502,16 @@
     }
 
     .pile-label {
-      font-size: 0.9rem;
+      font-size: 0.75rem;
     }
 
     .discarded {
-      font-size: 1.3rem;
-      padding: 0.05rem 0.1rem;
+      font-size: 1.1rem;
     }
 
     .my-area {
-      padding: var(--space-sm);
+      padding: var(--space-xs) var(--space-sm);
       padding-bottom: calc(var(--space-sm) + env(safe-area-inset-bottom, 0px));
-    }
-
-    .my-info {
-      font-size: 0.95rem;
-    }
-
-    .turn-indicator {
-      font-size: 0.75rem;
     }
 
     .hu-button {
@@ -514,8 +519,8 @@
       padding: var(--space-xs) var(--space-lg);
     }
 
-    .meld-tile {
-      font-size: 1.1rem;
+    .meld-label {
+      font-size: 0.5rem;
     }
   }
 </style>

@@ -49,7 +49,7 @@ export class BotPlayer {
     if (state.currentTurn === this.seat && state.turnPhase === 'discarding') {
       // Check for self-draw win first
       const ruleset = getRuleset(state.rulesetId);
-      if (canDeclareWin(state, this.seat, ruleset)) {
+      if (canDeclareWin(state, ruleset)) {
         return { type: 'win' };
       }
 

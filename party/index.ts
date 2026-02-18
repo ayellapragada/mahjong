@@ -21,7 +21,7 @@ import { declareSelfDrawWin, declareDiscardWin } from "../src/game/win";
 export class MahjongRoom extends Server {
   state!: GameState;
   bots: Map<Seat, BotPlayer> = new Map();
-  botTimeouts: Map<Seat, ReturnType<typeof setTimeout>> = new Map();
+  pendingBotAction?: { seat: Seat; scheduledAt: number };
   lastWinner?: Seat;
 
   onStart() {
@@ -101,7 +101,7 @@ export class MahjongRoom extends Server {
   // ACTION HANDLERS
   // ============================================================================
 
-  handleJoin(conn: Connection, name: string, seat: Seat) {
+  async handleJoin(conn: Connection, name: string, seat: Seat) {
     // Check if a bot occupies this seat
     if (this.bots.has(seat)) {
       // Remove the bot player from state first
@@ -125,11 +125,11 @@ export class MahjongRoom extends Server {
     // If game is in progress, send state and schedule bot actions
     if (this.state.phase === 'playing') {
       this.broadcastGameState();
-      this.scheduleBotActions();
+      await this.scheduleBotActions();
     }
   }
 
-  handleStartGame(conn: Connection) {
+  async handleStartGame(conn: Connection) {
     // Only allow starting if player is in the game
     const player = this.state.players.find(p => p.id === conn.id);
     if (!player) {
@@ -159,10 +159,10 @@ export class MahjongRoom extends Server {
     this.broadcastGameState();
 
     // Schedule bot actions if any bots are playing
-    this.scheduleBotActions();
+    await this.scheduleBotActions();
   }
 
-  handleDiscard(conn: Connection, tileId: string) {
+  async handleDiscard(conn: Connection, tileId: string) {
     const player = this.state.players.find(p => p.id === conn.id);
     if (!player) {
       this.sendError(conn, "You are not in this game");
@@ -189,10 +189,10 @@ export class MahjongRoom extends Server {
 
     this.broadcastGameState();
     if (this.checkForDraw()) return;
-    this.scheduleBotActions();
+    await this.scheduleBotActions();
   }
 
-  handleCall(conn: Connection, callType: "chi" | "peng" | "gang" | "pass" | "win", tileIds: string[]) {
+  async handleCall(conn: Connection, callType: "chi" | "peng" | "gang" | "pass" | "win", tileIds: string[]) {
     const player = this.state.players.find(p => p.id === conn.id);
     if (!player) {
       this.sendError(conn, "You are not in this game");
@@ -244,7 +244,7 @@ export class MahjongRoom extends Server {
       }
 
       this.broadcastGameState();
-      this.scheduleBotActions();
+      await this.scheduleBotActions();
       return;
     }
 
@@ -276,7 +276,7 @@ export class MahjongRoom extends Server {
 
     this.broadcastGameState();
     if (this.checkForDraw()) return;
-    this.scheduleBotActions();
+    await this.scheduleBotActions();
   }
 
   handleDeclareWin(conn: Connection) {
@@ -326,7 +326,7 @@ export class MahjongRoom extends Server {
     this.broadcastGameState();
   }
 
-  handleStartNextRound(conn: Connection) {
+  async handleStartNextRound(conn: Connection) {
     const player = this.state.players.find(p => p.id === conn.id);
     if (!player) {
       this.sendError(conn, "You are not in this game");
@@ -356,7 +356,7 @@ export class MahjongRoom extends Server {
     }
 
     this.broadcastGameState();
-    this.scheduleBotActions();
+    await this.scheduleBotActions();
   }
 
   // ============================================================================
@@ -381,11 +381,9 @@ export class MahjongRoom extends Server {
   }
 
   bumpBot(seat: Seat) {
-    // Cancel any pending action
-    const timeout = this.botTimeouts.get(seat);
-    if (timeout) {
-      clearTimeout(timeout);
-      this.botTimeouts.delete(seat);
+    // Clear pending action if it was for this bot
+    if (this.pendingBotAction?.seat === seat) {
+      this.pendingBotAction = undefined;
     }
 
     // Remove from bots map
@@ -395,42 +393,77 @@ export class MahjongRoom extends Server {
   }
 
   clearAllBots() {
-    for (const timeout of this.botTimeouts.values()) {
-      clearTimeout(timeout);
-    }
-    this.botTimeouts.clear();
+    this.pendingBotAction = undefined;
     this.bots.clear();
   }
 
-  scheduleBotActions() {
+  async scheduleBotActions() {
+    this.broadcastDebug(`scheduleBotActions: phase=${this.state.phase}, bots=${this.bots.size}, turnPhase=${this.state.turnPhase}, currentTurn=${this.state.currentTurn}`);
     if (this.state.phase !== 'playing') return;
 
+    // Find the first bot that needs to act
     for (const [seat, bot] of this.bots) {
-      // Cancel any existing timeout for this bot
-      const existingTimeout = this.botTimeouts.get(seat);
-      if (existingTimeout) {
-        clearTimeout(existingTimeout);
-      }
+      // Check if bot needs to act
+      const needsToAct = (this.state.currentTurn === seat && this.state.turnPhase === 'discarding') ||
+                         (this.state.turnPhase === 'waiting_for_calls' && this.state.awaitingCallFrom.includes(seat));
 
-      // Check if bot might need to act (simplified check)
-      const mightAct = (this.state.currentTurn === seat && this.state.turnPhase === 'discarding') ||
-                       (this.state.turnPhase === 'waiting_for_calls' && this.state.awaitingCallFrom.includes(seat));
+      this.broadcastDebug(`Bot ${seat} check: needsToAct=${needsToAct}`);
 
-      if (mightAct) {
-        const delay = bot.getThinkingDelay();
-        const timeout = setTimeout(() => {
-          // Re-evaluate action at execution time with current state
+      if (needsToAct) {
+        // Execute bot action immediately (no delay for now to debug)
+        this.broadcastDebug(`Bot ${seat} executing action...`);
+        try {
           const action = bot.decideAction(this.state);
+          this.broadcastDebug(`Bot ${seat} decided: ${JSON.stringify(action)}`);
+
           if (action) {
-            this.executeBotAction(seat, action);
+            await this.executeBotAction(seat, action);
+          } else {
+            const player = this.state.players.find(p => p.seat === seat);
+            this.broadcastDebug(`Bot ${seat} null action! player=${player ? `handSize=${player.hand.length}` : 'NOT FOUND'}`);
           }
-        }, delay);
-        this.botTimeouts.set(seat, timeout);
+        } catch (err) {
+          this.broadcastDebug(`Bot ${seat} ERROR: ${err}`);
+        }
+
+        // Only handle one bot at a time
+        return;
       }
     }
   }
 
-  executeBotAction(seat: Seat, action: BotAction) {
+  // Called when the alarm fires
+  async onAlarm() {
+    console.log(`[${this.state.roomCode}] onAlarm fired, pendingBotAction=${JSON.stringify(this.pendingBotAction)}`);
+
+    if (!this.pendingBotAction) {
+      console.log(`[${this.state.roomCode}] No pending bot action`);
+      return;
+    }
+
+    const { seat } = this.pendingBotAction;
+    this.pendingBotAction = undefined;
+
+    const bot = this.bots.get(seat);
+    if (!bot) {
+      console.log(`[${this.state.roomCode}] Bot ${seat} no longer exists`);
+      return;
+    }
+
+    console.log(`[${this.state.roomCode}] Bot ${seat} alarm fired, turnPhase=${this.state.turnPhase}, currentTurn=${this.state.currentTurn}`);
+    const action = bot.decideAction(this.state);
+    console.log(`[${this.state.roomCode}] Bot ${seat} decided action:`, action);
+
+    if (action) {
+      await this.executeBotAction(seat, action);
+    } else {
+      console.log(`[${this.state.roomCode}] Bot ${seat} returned null action!`);
+      const player = this.state.players.find(p => p.seat === seat);
+      console.log(`[${this.state.roomCode}] Bot ${seat} player found:`, player ? `handSize=${player.hand.length}` : 'NOT FOUND');
+    }
+  }
+
+  async executeBotAction(seat: Seat, action: BotAction) {
     // Verify bot still exists (wasn't bumped by human)
     if (!this.bots.has(seat)) return;
 
@@ -438,13 +471,13 @@ export class MahjongRoom extends Server {
 
     switch (action.type) {
       case 'discard':
-        this.handleBotDiscard(seat, action.tileId);
+        await this.handleBotDiscard(seat, action.tileId);
         break;
       case 'call':
-        this.handleBotCall(seat, action.callType, action.tileIds);
+        await this.handleBotCall(seat, action.callType, action.tileIds);
         break;
       case 'pass':
-        this.handleBotPass(seat);
+        await this.handleBotPass(seat);
         break;
       case 'win':
         this.handleBotWin(seat);
@@ -452,7 +485,7 @@ export class MahjongRoom extends Server {
     }
   }
 
-  handleBotDiscard(seat: Seat, tileId: string) {
+  async handleBotDiscard(seat: Seat, tileId: string) {
     const ruleset = getRuleset(this.state.rulesetId);
     const result = discardTile(this.state, seat, tileId, ruleset);
 
@@ -473,10 +506,10 @@ export class MahjongRoom extends Server {
 
     this.broadcastGameState();
     if (this.checkForDraw()) return;
-    this.scheduleBotActions();
+    await this.scheduleBotActions();
   }
 
-  handleBotCall(seat: Seat, callType: 'chi' | 'peng' | 'gang', tileIds: string[]) {
+  async handleBotCall(seat: Seat, callType: 'chi' | 'peng' | 'gang', tileIds: string[]) {
     if (this.state.turnPhase !== "waiting_for_calls") return;
     if (!this.state.awaitingCallFrom.includes(seat)) return;
 
@@ -498,10 +531,10 @@ export class MahjongRoom extends Server {
 
     this.broadcastGameState();
     if (this.checkForDraw()) return;
-    this.scheduleBotActions();
+    await this.scheduleBotActions();
   }
 
-  handleBotPass(seat: Seat) {
+  async handleBotPass(seat: Seat) {
     if (this.state.turnPhase !== "waiting_for_calls") return;
     if (!this.state.awaitingCallFrom.includes(seat)) return;
 
@@ -523,7 +556,7 @@ export class MahjongRoom extends Server {
 
     this.broadcastGameState();
     if (this.checkForDraw()) return;
-    this.scheduleBotActions();
+    await this.scheduleBotActions();
   }
 
   handleBotWin(seat: Seat) {
