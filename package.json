@@ -1,0 +1,39 @@
+{
+  "name": "mahjong",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:worker": "wrangler dev",
+    "dev:all": "concurrently \"npm run dev\" \"npm run dev:worker\"",
+    "build": "vite build",
+    "preview": "vite preview",
+    "deploy": "wrangler deploy",
+    "check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "demo": "npx tsx src/game/demo.ts",
+    "test:server": "npx tsx src/game/test-server.ts"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^6.2.1",
+    "@tsconfig/svelte": "^5.0.6",
+    "@types/node": "^24.10.1",
+    "@types/qrcode": "^1.5.6",
+    "@types/ws": "^8.18.1",
+    "concurrently": "^9.2.1",
+    "svelte": "^5.45.2",
+    "svelte-check": "^4.3.4",
+    "tsx": "^4.21.0",
+    "typescript": "~5.9.3",
+    "vite": "^7.3.1",
+    "vitest": "^3.2.4",
+    "wrangler": "^4.66.0",
+    "ws": "^8.19.0"
+  },
+  "dependencies": {
+    "partyserver": "^0.1.5",
+    "qrcode": "^1.5.4"
+  }
+}
