@@ -5,7 +5,7 @@
   import { createConnection, type ConnectionState, type ViewMode } from "./lib/connection";
   import { initSounds } from "./lib/sounds";
   import { saveSession, getSession, clearSession, updateSession } from "./lib/session";
-  import { parseRoute, navigateTo, replaceRoute } from "./lib/router";
+  import { parseRoute, navigateTo, replaceRoute, getFullUrl } from "./lib/router";
   import HomeView from "./views/HomeView.svelte";
   import LobbyView from "./views/LobbyView.svelte";
   import TableView from "./views/TableView.svelte";
@@ -60,18 +60,34 @@
   onMount(() => {
     initSounds();
 
-    const route = parseRoute();
+    // Handle legacy path-based URLs by redirecting to hash-based
+    // This catches old /play/XXXX or /table/XXXX URLs
+    const path = window.location.pathname;
+    const basePath = import.meta.env.BASE_URL || '/';
+    const base = basePath.endsWith('/') ? basePath.slice(0, -1) : basePath;
+    const relativePath = path.startsWith(base) ? path.slice(base.length) : path;
 
-    // Handle legacy ?room= URLs by redirecting to /play/XXXX
+    const legacyPlayMatch = relativePath.match(/^\/play\/([A-Za-z0-9]+)$/);
+    if (legacyPlayMatch) {
+      replaceRoute({ type: 'play', roomCode: legacyPlayMatch[1].toUpperCase() });
+      // Continue with route parsing below
+    }
+
+    const legacyTableMatch = relativePath.match(/^\/table\/([A-Za-z0-9]+)$/);
+    if (legacyTableMatch) {
+      replaceRoute({ type: 'table', roomCode: legacyTableMatch[1].toUpperCase() });
+      // Continue with route parsing below
+    }
+
+    // Handle legacy ?room= query param
     const params = new URLSearchParams(window.location.search);
     const legacyRoomCode = params.get("room");
     if (legacyRoomCode && legacyRoomCode.length === 4) {
       replaceRoute({ type: 'play', roomCode: legacyRoomCode.toUpperCase() });
-      viewMode = "player";
-      connection.connect(legacyRoomCode.toUpperCase(), "player");
-      saveSession({ roomCode: legacyRoomCode.toUpperCase(), viewMode: "player" });
-      return;
     }
+
+    // Now parse the (potentially updated) route
+    const route = parseRoute();
 
     // Route-based initialization
     if (route.type === 'play' || route.type === 'table') {
@@ -98,10 +114,8 @@
   });
 
   async function generateQRCode(roomCode: string) {
-    // Generate QR code for joining - use /play/ URL with base path
-    const basePath = import.meta.env.BASE_URL || '/';
-    const base = basePath.endsWith('/') ? basePath.slice(0, -1) : basePath;
-    joinUrl = `${window.location.origin}${base}/play/${roomCode}`;
+    // Generate QR code for joining - use hash-based URL
+    joinUrl = getFullUrl({ type: 'play', roomCode });
     qrCodeUrl = await QRCode.toDataURL(joinUrl, {
       width: 200,
       margin: 2,

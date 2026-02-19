@@ -5,15 +5,24 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>mahjong</title>
-    <!-- Handle redirect from 404.html for GitHub Pages SPA -->
+    <!-- Handle legacy path-based URLs from 404.html redirect -->
     <script>
       (function() {
-        // Check for redirect query parameter (works in Safari private mode)
+        // If we got here via 404 redirect with ?redirect= param,
+        // extract the path and convert to hash-based routing
         var params = new URLSearchParams(location.search);
         var redirect = params.get('redirect');
         if (redirect) {
-          // Restore the original URL without the redirect param
-          history.replaceState(null, null, redirect);
+          // Extract /play/XXXX or /table/XXXX from the redirect path
+          var match = redirect.match(/\/(play|table)\/([A-Za-z0-9]+)/);
+          if (match) {
+            // Convert to hash-based URL: /#/play/XXXX
+            var hashPath = '#/' + match[1] + '/' + match[2].toUpperCase();
+            history.replaceState(null, null, location.pathname + hashPath);
+          } else {
+            // Just clear the query string
+            history.replaceState(null, null, location.pathname);
+          }
         }
       })();
     </script>

@@ -1,5 +1,8 @@
 /**
- * URL routing utilities for path-based navigation
+ * URL routing utilities using hash-based navigation
+ * Hash routes work reliably on static hosts (GitHub Pages) without 404 redirects
+ *
+ * URL format: https://example.com/mahjong/#/play/XXXX
  */
 
 export type Route =
@@ -8,53 +11,37 @@ export type Route =
 	| { type: 'table'; roomCode: string };
 
 /**
- * Get the base path from Vite's import.meta.env.BASE_URL
- * This is set to '/mahjong/' on GitHub Pages and '/' locally
+ * Convert a Route to its hash path
  */
-function getBasePath(): string {
-	const base = import.meta.env.BASE_URL || '/';
-	// Remove trailing slash for easier concatenation
-	return base.endsWith('/') ? base.slice(0, -1) : base;
-}
-
-/**
- * Convert a Route to its URL path (includes base path)
- */
-function routeToPath(route: Route): string {
-	const base = getBasePath();
+function routeToHash(route: Route): string {
 	switch (route.type) {
 		case 'home':
-			return base || '/';
+			return '#/';
 		case 'play':
-			return `${base}/play/${route.roomCode}`;
+			return `#/play/${route.roomCode}`;
 		case 'table':
-			return `${base}/table/${route.roomCode}`;
+			return `#/table/${route.roomCode}`;
 	}
 }
 
 /**
- * Parse the current URL path and return a Route object
- * - /play/XXXX or /mahjong/play/XXXX → { type: 'play', roomCode: 'XXXX' }
- * - /table/XXXX or /mahjong/table/XXXX → { type: 'table', roomCode: 'XXXX' }
+ * Parse the current URL hash and return a Route object
+ * - #/play/XXXX → { type: 'play', roomCode: 'XXXX' }
+ * - #/table/XXXX → { type: 'table', roomCode: 'XXXX' }
  * - Everything else → { type: 'home' }
  */
 export function parseRoute(): Route {
-	let path = window.location.pathname;
-
-	// Strip base path if present (e.g., /mahjong/)
-	const base = getBasePath();
-	if (base && path.startsWith(base)) {
-		path = path.slice(base.length) || '/';
-	}
+	// Get hash without the leading #
+	const hash = window.location.hash.slice(1) || '/';
 
 	// Match /play/XXXX
-	const playMatch = path.match(/^\/play\/([A-Za-z0-9]+)$/);
+	const playMatch = hash.match(/^\/play\/([A-Za-z0-9]+)$/);
 	if (playMatch) {
 		return { type: 'play', roomCode: playMatch[1].toUpperCase() };
 	}
 
 	// Match /table/XXXX
-	const tableMatch = path.match(/^\/table\/([A-Za-z0-9]+)$/);
+	const tableMatch = hash.match(/^\/table\/([A-Za-z0-9]+)$/);
 	if (tableMatch) {
 		return { type: 'table', roomCode: tableMatch[1].toUpperCase() };
 	}
@@ -64,23 +51,29 @@ export function parseRoute(): Route {
 }
 
 /**
- * Navigate to a new route by pushing state to browser history
- * Only pushes if the path is different from the current path
+ * Navigate to a new route by updating the hash
  */
 export function navigateTo(route: Route): void {
-	const newPath = routeToPath(route);
-	const currentPath = window.location.pathname;
-
-	if (newPath !== currentPath) {
-		window.history.pushState(null, '', newPath);
+	const newHash = routeToHash(route);
+	if (window.location.hash !== newHash) {
+		window.location.hash = newHash;
 	}
 }
 
 /**
  * Replace the current route in browser history (for redirects)
- * Uses replaceState instead of pushState
+ * Uses replaceState to avoid adding to history
  */
 export function replaceRoute(route: Route): void {
-	const newPath = routeToPath(route);
-	window.history.replaceState(null, '', newPath);
+	const newHash = routeToHash(route);
+	window.history.replaceState(null, '', newHash);
+}
+
+/**
+ * Get the full URL for a route (used for QR codes and sharing)
+ */
+export function getFullUrl(route: Route): string {
+	const basePath = import.meta.env.BASE_URL || '/';
+	const base = basePath.endsWith('/') ? basePath.slice(0, -1) : basePath;
+	return `${window.location.origin}${base}/${routeToHash(route)}`;
 }
