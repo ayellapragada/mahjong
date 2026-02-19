@@ -118,6 +118,9 @@ export interface GameState {
 
   // Action history for debugging and display
   actionLog: GameAction[];
+
+  // Track which tile was just drawn (for UI highlighting)
+  lastDrawnTileId?: string;
 }
 
 export type TurnPhase =
@@ -179,6 +182,9 @@ export interface ClientGameState {
 
   // Action history (last N actions)
   recentActions: GameAction[];
+
+  // Track which tile was just drawn (for UI highlighting)
+  lastDrawnTileId?: string;
 }
 
 export interface AvailableCall {

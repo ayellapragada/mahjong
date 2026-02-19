@@ -381,6 +381,7 @@ export function drawTile(state: GameState, ruleset: Ruleset): GameState | { erro
       ? { deadWall: remainingWall }
       : { wall: remainingWall }),
     turnPhase: 'discarding',
+    lastDrawnTileId: drawnTile.id,
   };
 }
 
@@ -446,6 +447,7 @@ export function discardTile(
       pendingCalls: [],
       awaitingCallFrom: playersWithCalls,
       callWindowStart: Date.now(),
+      lastDrawnTileId: undefined,
     };
   }
 
@@ -460,6 +462,7 @@ export function discardTile(
     currentTurn: nextSeat,
     turnPhase: 'drawing',
     pendingCalls: [],
+    lastDrawnTileId: undefined,
   };
 }
 
@@ -597,6 +600,9 @@ export function getClientState(state: GameState, playerId: string): ClientGameSt
     handNumber: state.handNumber,
     canWin,
     recentActions,
+    lastDrawnTileId: player.seat === state.currentTurn && state.turnPhase === 'discarding'
+      ? state.lastDrawnTileId
+      : undefined,
   };
 }
 

@@ -6,11 +6,12 @@
     tile: TileInstance;
     selected?: boolean;
     highlighted?: boolean;
+    justDrawn?: boolean;
     disabled?: boolean;
     onclick?: () => void;
   }
 
-  let { tile, selected = false, highlighted = false, disabled = false, onclick }: Props = $props();
+  let { tile, selected = false, highlighted = false, justDrawn = false, disabled = false, onclick }: Props = $props();
 
   // Get number for suited tiles
   const tileNumber = $derived(
@@ -22,6 +23,7 @@
   class="tile"
   class:selected
   class:highlighted
+  class:just-drawn={justDrawn}
   class:disabled
   onclick={onclick}
   {disabled}
@@ -104,6 +106,30 @@
     animation: highlightPulse 0.8s ease-in-out infinite;
   }
 
+  .tile.just-drawn {
+    border-color: #d4a5b0;
+    box-shadow:
+      0 4px 8px rgba(0, 0, 0, 0.25),
+      0 0 8px rgba(212, 165, 176, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    animation: justDrawnPulse 2s ease-in-out infinite;
+  }
+
+  @keyframes justDrawnPulse {
+    0%, 100% {
+      box-shadow:
+        0 4px 8px rgba(0, 0, 0, 0.25),
+        0 0 8px rgba(212, 165, 176, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    }
+    50% {
+      box-shadow:
+        0 4px 8px rgba(0, 0, 0, 0.25),
+        0 0 14px rgba(212, 165, 176, 0.55),
+        inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    }
+  }
+
   @keyframes highlightPulse {
     0%, 100% {
       box-shadow:
@@ -152,6 +178,13 @@
 
     .tile.highlighted {
       transform: translateY(-3px);
+    }
+
+    .tile.just-drawn {
+      box-shadow:
+        0 3px 6px rgba(0, 0, 0, 0.2),
+        0 0 6px rgba(212, 165, 176, 0.35),
+        inset 0 1px 0 rgba(255, 255, 255, 0.9);
     }
   }
 

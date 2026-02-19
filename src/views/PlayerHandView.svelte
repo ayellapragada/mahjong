@@ -172,6 +172,7 @@
       {canDiscard}
       onDiscard={handleDiscardWithHaptic}
       {highlightedTileIds}
+      lastDrawnTileId={gameState.lastDrawnTileId}
     />
   </div>
 
