@@ -12,9 +12,15 @@ export function initSounds(): void {
       const audio = new Audio(`/sounds/${name}.mp3`);
       audio.preload = 'auto';
       audio.volume = 0.5;
-      audioElements.set(name, audio);
+      // Only add to map if file loads successfully
+      audio.addEventListener('canplaythrough', () => {
+        audioElements.set(name, audio);
+      });
+      audio.addEventListener('error', () => {
+        // Sound file not found - fail silently
+      });
     } catch {
-      console.warn(`Failed to load sound: ${name}`);
+      // Sound initialization failed - fail silently
     }
   });
 }
