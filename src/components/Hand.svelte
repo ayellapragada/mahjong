@@ -5,6 +5,19 @@
   import Tile from "./Tile.svelte";
   import { getTileInfo, tileToSvgPath } from "../lib/tiles";
   import { vibrate } from "../lib/haptics";
+  import {
+    createDragDropState,
+    handleDragStart as ddDragStart,
+    handleDragOver as ddDragOver,
+    handleDragLeave as ddDragLeave,
+    handleDrop as ddDrop,
+    handleDragEnd as ddDragEnd,
+    handleTouchStart as ddTouchStart,
+    handleTouchMove as ddTouchMove,
+    handleTouchEnd as ddTouchEnd,
+    cleanupGhost,
+    type DragDropState,
+  } from "../lib/drag-drop";
 
   interface Props {
     tiles: TileInstance[];
@@ -27,22 +40,11 @@
 
   // Drag-and-drop state
   let tileOrder: string[] = $state([]);
-  let draggedTileId: string | null = $state(null);
-  let dropTargetIndex: number | null = $state(null);
-
-  // Touch drag state
-  let touchDragId: string | null = $state(null);
-  let touchStartX: number = $state(0);
-  let touchStartY: number = $state(0);
-  let ghostElement: HTMLDivElement | null = $state(null);
+  let dragState = $state<DragDropState>(createDragDropState());
 
   // Cleanup ghost elements on unmount
   $effect(() => {
-    return () => {
-      if (ghostElement) {
-        ghostElement.remove();
-      }
-    };
+    return () => cleanupGhost(dragState);
   });
 
   // Sync order with incoming tiles (preserve existing, append new)
@@ -85,136 +87,37 @@
     }
   }
 
-  // Drag-and-drop handlers
-  function handleDragStart(e: DragEvent, tileId: string) {
-    draggedTileId = tileId;
-    if (e.dataTransfer) {
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', tileId);
-    }
+  // Drag-and-drop handlers (delegating to utility)
+  function onDragStart(e: DragEvent, tileId: string) {
+    dragState = ddDragStart(dragState, e, tileId);
   }
 
-  function handleDragOver(e: DragEvent, index: number) {
-    e.preventDefault();
-    if (e.dataTransfer) {
-      e.dataTransfer.dropEffect = 'move';
-    }
-    dropTargetIndex = index;
+  function onDragOver(e: DragEvent, index: number) {
+    dragState = ddDragOver(dragState, e, index);
   }
 
-  function handleDragLeave() {
-    dropTargetIndex = null;
+  function onDragLeave() {
+    dragState = ddDragLeave(dragState);
   }
 
-  function handleDrop(e: DragEvent, targetIndex: number) {
-    e.preventDefault();
-
-    if (draggedTileId === null) return;
-
-    const draggedIndex = tileOrder.indexOf(draggedTileId);
-    if (draggedIndex === -1 || draggedIndex === targetIndex) {
-      dropTargetIndex = null;
-      return;
-    }
-
-    // Reorder the tiles
-    const newOrder = [...tileOrder];
-    newOrder.splice(draggedIndex, 1);
-    newOrder.splice(targetIndex, 0, draggedTileId);
-    tileOrder = newOrder;
-
-    dropTargetIndex = null;
+  function onDrop(e: DragEvent, index: number) {
+    dragState = ddDrop(dragState, e, index, tileOrder, (newOrder) => { tileOrder = newOrder; });
   }
 
-  function handleDragEnd() {
-    draggedTileId = null;
-    dropTargetIndex = null;
+  function onDragEnd() {
+    dragState = ddDragEnd(dragState);
   }
 
-  function handleTouchStart(e: TouchEvent, tileId: string) {
-    const touch = e.touches[0];
-    touchDragId = tileId;
-    touchStartX = touch.clientX;
-    touchStartY = touch.clientY;
-    e.preventDefault();
-
-    // Create ghost element
-    const target = e.currentTarget as HTMLElement;
-    const rect = target.getBoundingClientRect();
-    ghostElement = document.createElement('div');
-    ghostElement.className = 'touch-ghost';
-    ghostElement.innerHTML = target.innerHTML;
-    ghostElement.style.cssText = `
-      position: fixed;
-      left: ${rect.left}px;
-      top: ${rect.top}px;
-      width: ${rect.width}px;
-      height: ${rect.height}px;
-      pointer-events: none;
-      z-index: 1000;
-      opacity: 0.8;
-      transform: scale(1.1);
-      transition: transform 0.1s ease;
-    `;
-    document.body.appendChild(ghostElement);
+  function onTouchStart(e: TouchEvent, tileId: string) {
+    dragState = ddTouchStart(dragState, e, tileId);
   }
 
-  function handleTouchMove(e: TouchEvent) {
-    if (!touchDragId || !ghostElement) return;
-    e.preventDefault();
-
-    const touch = e.touches[0];
-
-    // Move ghost
-    const rect = ghostElement.getBoundingClientRect();
-    ghostElement.style.left = `${touch.clientX - rect.width / 2}px`;
-    ghostElement.style.top = `${touch.clientY - rect.height / 2}px`;
-
-    // Find drop target
-    const elements = document.elementsFromPoint(touch.clientX, touch.clientY);
-    const dropTarget = elements.find(el =>
-      el.classList.contains('tile-wrapper') &&
-      !el.classList.contains('dragging')
-    ) as HTMLElement | undefined;
-
-    // Update drop target indicator
-    document.querySelectorAll('.tile-wrapper.drag-over').forEach(el =>
-      el.classList.remove('drag-over')
-    );
-
-    if (dropTarget) {
-      const index = Array.from(dropTarget.parentElement?.children || []).indexOf(dropTarget);
-      dropTargetIndex = index;
-      dropTarget.classList.add('drag-over');
-    } else {
-      dropTargetIndex = null;
-    }
+  function onTouchMove(e: TouchEvent) {
+    dragState = ddTouchMove(dragState, e, '.tile-wrapper');
   }
 
-  function handleTouchEnd(e: TouchEvent) {
-    if (!touchDragId) return;
-
-    // Complete the drop if we have a target
-    if (dropTargetIndex !== null && touchDragId) {
-      const draggedIndex = tileOrder.indexOf(touchDragId);
-      if (draggedIndex !== -1 && draggedIndex !== dropTargetIndex) {
-        const newOrder = [...tileOrder];
-        newOrder.splice(draggedIndex, 1);
-        newOrder.splice(dropTargetIndex, 0, touchDragId);
-        tileOrder = newOrder;
-      }
-    }
-
-    // Cleanup
-    if (ghostElement) {
-      ghostElement.remove();
-      ghostElement = null;
-    }
-    document.querySelectorAll('.tile-wrapper.drag-over').forEach(el =>
-      el.classList.remove('drag-over')
-    );
-    touchDragId = null;
-    dropTargetIndex = null;
+  function onTouchEnd() {
+    dragState = ddTouchEnd(dragState, tileOrder, (newOrder) => { tileOrder = newOrder; }, '.tile-wrapper');
   }
 
   function handleSort() {
@@ -257,17 +160,17 @@
     {#each orderedTiles() as tile, index (tile.id)}
       <div
         class="tile-wrapper"
-        class:drag-over={dropTargetIndex === index}
-        class:dragging={draggedTileId === tile.id || touchDragId === tile.id}
+        class:drag-over={dragState.dropTargetIndex === index}
+        class:dragging={dragState.draggedId === tile.id || dragState.touchDragId === tile.id}
         draggable="true"
-        ondragstart={(e) => handleDragStart(e, tile.id)}
-        ondragover={(e) => handleDragOver(e, index)}
-        ondragleave={handleDragLeave}
-        ondrop={(e) => handleDrop(e, index)}
-        ondragend={handleDragEnd}
-        ontouchstart={(e) => handleTouchStart(e, tile.id)}
-        ontouchmove={handleTouchMove}
-        ontouchend={handleTouchEnd}
+        ondragstart={(e) => onDragStart(e, tile.id)}
+        ondragover={(e) => onDragOver(e, index)}
+        ondragleave={onDragLeave}
+        ondrop={(e) => onDrop(e, index)}
+        ondragend={onDragEnd}
+        ontouchstart={(e) => onTouchStart(e, tile.id)}
+        ontouchmove={onTouchMove}
+        ontouchend={onTouchEnd}
         role="listitem"
       >
         <Tile
