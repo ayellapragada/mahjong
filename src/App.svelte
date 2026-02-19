@@ -3,7 +3,6 @@
   import QRCode from "qrcode";
   import type { Seat, ScoreBreakdown } from "./game/types";
   import { createConnection, type ConnectionState, type ViewMode } from "./lib/connection";
-  import { initSounds } from "./lib/sounds";
   import { saveSession, getSession, clearSession, updateSession } from "./lib/session";
   import { parseRoute, navigateTo, replaceRoute, getFullUrl } from "./lib/router";
   import HomeView from "./views/HomeView.svelte";
@@ -42,7 +41,7 @@
       const route = parseRoute();
       console.log('[Rejoin] Route:', route);
       if (route.type === 'play') {
-        const session = getSession(route.roomCode);
+        const session = getSession(route.roomCode, 'player');
         console.log('[Rejoin] Session for', route.roomCode, ':', session);
         if (session?.playerName && session.seat !== undefined) {
           rejoinAttempted = true;
@@ -64,8 +63,6 @@
   });
 
   onMount(() => {
-    initSounds();
-
     // Handle legacy path-based URLs by redirecting to hash-based
     // This catches old /play/XXXX or /table/XXXX URLs
     const path = window.location.pathname;
@@ -99,8 +96,8 @@
     // Route-based initialization
     if (route.type === 'play' || route.type === 'table') {
       viewMode = route.type === 'play' ? 'player' : 'table';
-      const session = getSession(route.roomCode);
-      console.log('[onMount] Session for', route.roomCode, ':', session);
+      const session = getSession(route.roomCode, viewMode);
+      console.log('[onMount] Session for', route.roomCode, viewMode, ':', session);
 
       // If we have an existing session with seat data, we might need to rejoin
       if (session?.playerName && session.seat !== undefined) {
@@ -160,9 +157,9 @@
     // Save player info to session for potential rejoin
     if (connectionState.status === 'connected') {
       console.log('[handleTakeSeat] Updating session for room', connectionState.roomCode, 'with', { playerName: name, seat });
-      updateSession(connectionState.roomCode, { playerName: name, seat });
+      updateSession(connectionState.roomCode, viewMode, { playerName: name, seat });
       // Verify it was saved
-      const saved = getSession(connectionState.roomCode);
+      const saved = getSession(connectionState.roomCode, viewMode);
       console.log('[handleTakeSeat] Session after save:', saved);
     }
     connection.send({ type: "JOIN", name, seat });
@@ -178,7 +175,7 @@
       const roomCode = connectionState.status === 'connected'
         ? connectionState.roomCode
         : connectionState.state.roomCode;
-      clearSession(roomCode);
+      clearSession(roomCode, viewMode);
     }
     navigateTo({ type: 'home' });
     connection.disconnect();

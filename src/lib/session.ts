@@ -14,8 +14,10 @@ export interface SessionData {
 const SESSION_KEY_PREFIX = 'mahjong-session-';
 const SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
 
-function getStorageKey(roomCode: string): string {
-	return `${SESSION_KEY_PREFIX}${roomCode}`;
+function getStorageKey(roomCode: string, viewMode?: 'player' | 'table'): string {
+	// Include viewMode in key so table and player views don't overwrite each other
+	const suffix = viewMode ? `-${viewMode}` : '';
+	return `${SESSION_KEY_PREFIX}${roomCode}${suffix}`;
 }
 
 function isSessionStale(timestamp: number): boolean {
@@ -31,7 +33,7 @@ export function saveSession(data: Omit<SessionData, 'timestamp'>): void {
 		...data,
 		timestamp: Date.now()
 	};
-	const key = getStorageKey(data.roomCode);
+	const key = getStorageKey(data.roomCode, data.viewMode);
 	try {
 		localStorage.setItem(key, JSON.stringify(sessionData));
 	} catch (error) {
@@ -44,8 +46,8 @@ export function saveSession(data: Omit<SessionData, 'timestamp'>): void {
  * Returns null if session doesn't exist or is stale (older than 24 hours).
  * Stale sessions are automatically cleared.
  */
-export function getSession(roomCode: string): SessionData | null {
-	const key = getStorageKey(roomCode);
+export function getSession(roomCode: string, viewMode: 'player' | 'table'): SessionData | null {
+	const key = getStorageKey(roomCode, viewMode);
 	try {
 		const stored = localStorage.getItem(key);
 		if (!stored) {
@@ -55,7 +57,7 @@ export function getSession(roomCode: string): SessionData | null {
 		const sessionData: SessionData = JSON.parse(stored);
 
 		if (isSessionStale(sessionData.timestamp)) {
-			clearSession(roomCode);
+			clearSession(roomCode, viewMode);
 			return null;
 		}
 
@@ -69,8 +71,8 @@ export function getSession(roomCode: string): SessionData | null {
 /**
  * Clear session data from localStorage.
  */
-export function clearSession(roomCode: string): void {
-	const key = getStorageKey(roomCode);
+export function clearSession(roomCode: string, viewMode: 'player' | 'table'): void {
+	const key = getStorageKey(roomCode, viewMode);
 	try {
 		localStorage.removeItem(key);
 	} catch (error) {
@@ -85,9 +87,10 @@ export function clearSession(roomCode: string): void {
  */
 export function updateSession(
 	roomCode: string,
-	updates: Partial<Omit<SessionData, 'roomCode' | 'timestamp'>>
+	viewMode: 'player' | 'table',
+	updates: Partial<Omit<SessionData, 'roomCode' | 'viewMode' | 'timestamp'>>
 ): void {
-	const existingSession = getSession(roomCode);
+	const existingSession = getSession(roomCode, viewMode);
 	if (!existingSession) {
 		return;
 	}
@@ -98,7 +101,7 @@ export function updateSession(
 		timestamp: Date.now()
 	};
 
-	const key = getStorageKey(roomCode);
+	const key = getStorageKey(roomCode, viewMode);
 	try {
 		localStorage.setItem(key, JSON.stringify(updatedSession));
 	} catch (error) {

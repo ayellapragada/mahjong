@@ -5,7 +5,6 @@
   import CallPrompt from "../components/CallPrompt.svelte";
   import ActionLog from "../components/ActionLog.svelte";
   import { vibrate } from "../lib/haptics";
-  import { playSound } from "../lib/sounds";
 
   interface Props {
     gameState: ClientGameState;
@@ -64,7 +63,6 @@
   }
 
   function handleDiscardWithHaptic(tileId: string) {
-    playSound('discard');
     vibrate('medium');
     onDiscard(tileId);
   }

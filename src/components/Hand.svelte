@@ -5,7 +5,6 @@
   import Tile from "./Tile.svelte";
   import { getTileInfo, tileToSvgPath } from "../lib/tiles";
   import { vibrate } from "../lib/haptics";
-  import { playSound } from "../lib/sounds";
 
   interface Props {
     tiles: TileInstance[];
@@ -69,7 +68,6 @@
 
   function handleTileClick(tileId: string) {
     if (!canDiscard) return;
-    playSound('tile-click');
     vibrate('light');
 
     if (selectedTileId === tileId) {

@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { AvailableCall, TileInstance } from "../game/types";
   import { tileToUnicode, tileToSvgPath } from "../lib/tiles";
-  import { playSound } from "../lib/sounds";
 
   interface Props {
     calls: AvailableCall[];
@@ -53,25 +52,21 @@
       return; // Must select first
     }
 
-    playSound('call');
     const combo = chiCall.tiles[selectedChiCombo ?? 0];
     onCall("chi", combo.map(t => t.id));
   }
 
   function handlePeng() {
     if (!pengCall?.tiles?.[0]) return;
-    playSound('call');
     onCall("peng", pengCall.tiles[0].map(t => t.id));
   }
 
   function handleGang() {
     if (!gangCall?.tiles?.[0]) return;
-    playSound('call');
     onCall("gang", gangCall.tiles[0].map(t => t.id));
   }
 
   function handleWin() {
-    playSound('win');
     onCall("win", []);
   }
 
