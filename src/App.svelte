@@ -106,8 +106,10 @@
 
     connection.connect(roomId, "table");
 
-    // Generate QR code for joining - use /play/ URL
-    joinUrl = `${window.location.origin}/play/${roomId}`;
+    // Generate QR code for joining - use /play/ URL with base path
+    const basePath = import.meta.env.BASE_URL || '/';
+    const base = basePath.endsWith('/') ? basePath.slice(0, -1) : basePath;
+    joinUrl = `${window.location.origin}${base}/play/${roomId}`;
     qrCodeUrl = await QRCode.toDataURL(joinUrl, {
       width: 200,
       margin: 2,

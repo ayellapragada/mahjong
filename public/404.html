@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>mahjong</title>
+    <script>
+      // Single Page Apps for GitHub Pages
+      // Store the original URL and redirect to index.html
+      // The index.html will restore the URL using history.replaceState
+      sessionStorage.redirect = location.href;
+      // Redirect to base path (keep /mahjong/)
+      var pathSegmentsToKeep = 1;
+      var basePath = location.pathname.split('/').slice(0, 1 + pathSegmentsToKeep).join('/') + '/';
+      location.replace(basePath);
+    </script>
+  </head>
+  <body>
+  </body>
+</html>

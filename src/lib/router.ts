@@ -8,27 +8,44 @@ export type Route =
 	| { type: 'table'; roomCode: string };
 
 /**
- * Convert a Route to its URL path
+ * Get the base path from Vite's import.meta.env.BASE_URL
+ * This is set to '/mahjong/' on GitHub Pages and '/' locally
+ */
+function getBasePath(): string {
+	const base = import.meta.env.BASE_URL || '/';
+	// Remove trailing slash for easier concatenation
+	return base.endsWith('/') ? base.slice(0, -1) : base;
+}
+
+/**
+ * Convert a Route to its URL path (includes base path)
  */
 function routeToPath(route: Route): string {
+	const base = getBasePath();
 	switch (route.type) {
 		case 'home':
-			return '/';
+			return base || '/';
 		case 'play':
-			return `/play/${route.roomCode}`;
+			return `${base}/play/${route.roomCode}`;
 		case 'table':
-			return `/table/${route.roomCode}`;
+			return `${base}/table/${route.roomCode}`;
 	}
 }
 
 /**
  * Parse the current URL path and return a Route object
- * - /play/XXXX → { type: 'play', roomCode: 'XXXX' }
- * - /table/XXXX → { type: 'table', roomCode: 'XXXX' }
+ * - /play/XXXX or /mahjong/play/XXXX → { type: 'play', roomCode: 'XXXX' }
+ * - /table/XXXX or /mahjong/table/XXXX → { type: 'table', roomCode: 'XXXX' }
  * - Everything else → { type: 'home' }
  */
 export function parseRoute(): Route {
-	const path = window.location.pathname;
+	let path = window.location.pathname;
+
+	// Strip base path if present (e.g., /mahjong/)
+	const base = getBasePath();
+	if (base && path.startsWith(base)) {
+		path = path.slice(base.length) || '/';
+	}
 
 	// Match /play/XXXX
 	const playMatch = path.match(/^\/play\/([A-Za-z0-9]+)$/);
