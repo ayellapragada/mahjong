@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { ClientGameState, Meld, Seat, RedactedPlayer } from "../game/types";
   import { tileToUnicode, tileToSvgPath } from "../lib/tiles";
+  import FullscreenButton from "../components/FullscreenButton.svelte";
 
   interface Props {
     state: ClientGameState;
@@ -25,6 +26,7 @@
 <div class="table-view">
   <header>
     <div class="room-badge">{state.roomCode}</div>
+    <FullscreenButton />
     <div class="wall-count">{state.wallCount} tiles remaining</div>
   </header>
 
