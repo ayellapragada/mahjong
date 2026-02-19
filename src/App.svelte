@@ -27,8 +27,6 @@
   let rejoinAttempted = false;
 
   const connection = createConnection((newState) => {
-    console.log('[Connection] Status changed:', previousStatus, '->', newState.status);
-
     // Show toast when reconnection succeeds
     if (previousStatus === "reconnecting" &&
         (newState.status === "connected" || newState.status === "playing")) {
@@ -36,16 +34,12 @@
     }
 
     // Handle rejoin for mid-game restoration (only on page load with existing session)
-    console.log('[Rejoin Check] shouldAttemptRejoin:', shouldAttemptRejoin, 'rejoinAttempted:', rejoinAttempted, 'status:', newState.status);
     if (shouldAttemptRejoin && !rejoinAttempted && newState.status === "playing") {
       const route = parseRoute();
-      console.log('[Rejoin] Route:', route);
       if (route.type === 'play') {
         const session = getSession(route.roomCode, 'player');
-        console.log('[Rejoin] Session for', route.roomCode, ':', session);
         if (session?.playerName && session.seat !== undefined) {
           rejoinAttempted = true;
-          console.log('[Rejoin] Sending REJOIN action:', session.playerName, 'seat', session.seat);
           connection.send({ type: "REJOIN", name: session.playerName, seat: session.seat as Seat });
           toast.success("Rejoined game!");
         }
@@ -91,25 +85,21 @@
 
     // Now parse the (potentially updated) route
     const route = parseRoute();
-    console.log('[onMount] Parsed route:', route);
 
     // Route-based initialization
     if (route.type === 'play' || route.type === 'table') {
       viewMode = route.type === 'play' ? 'player' : 'table';
       const session = getSession(route.roomCode, viewMode);
-      console.log('[onMount] Session for', route.roomCode, viewMode, ':', session);
 
       // If we have an existing session with seat data, we might need to rejoin
       if (session?.playerName && session.seat !== undefined) {
         shouldAttemptRejoin = true;
-        console.log('[onMount] Will attempt rejoin - session has player data');
       }
 
       connection.connect(route.roomCode, viewMode);
 
       // Save session if we don't have one
       if (!session) {
-        console.log('[onMount] No session found, saving new session');
         saveSession({ roomCode: route.roomCode, viewMode });
       }
 
@@ -156,11 +146,7 @@
   function handleTakeSeat(name: string, seat: Seat) {
     // Save player info to session for potential rejoin
     if (connectionState.status === 'connected') {
-      console.log('[handleTakeSeat] Updating session for room', connectionState.roomCode, 'with', { playerName: name, seat });
       updateSession(connectionState.roomCode, viewMode, { playerName: name, seat });
-      // Verify it was saved
-      const saved = getSession(connectionState.roomCode, viewMode);
-      console.log('[handleTakeSeat] Session after save:', saved);
     }
     connection.send({ type: "JOIN", name, seat });
   }
