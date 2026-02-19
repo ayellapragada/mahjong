@@ -29,76 +29,80 @@
   </header>
 
   <div class="table">
-    <!-- North player (top) with discards below -->
+    <!-- North player (top) - rotated 180deg to face center -->
     <div class="player-section north">
-      <div class="player-area" class:current-turn={state.currentTurn === 3}>
-        {#if northPlayer}
-          <div class="player-info">
-            <span class="wind">{WIND_CHARS[3]}</span>
-            <span class="name">{northPlayer.name}</span>
-            {#if northPlayer.isDealer}<span class="dealer">莊</span>{/if}
-          </div>
-          <div class="hand-indicator">{northPlayer.handCount} tiles</div>
-          {#if northPlayer.melds.length > 0}
-            <div class="melds">
-              {#each northPlayer.melds as meld}
-                <div class="meld">
-                  {#each meld.tiles as tile}
-                    <img src={tileToSvgPath(tile.tile)} alt="" class="meld-tile" />
-                  {/each}
-                </div>
-              {/each}
+      <div class="player-content">
+        <div class="player-area" class:current-turn={state.currentTurn === 3}>
+          {#if northPlayer}
+            <div class="player-info">
+              <span class="wind">{WIND_CHARS[3]}</span>
+              <span class="name">{northPlayer.name}</span>
+              {#if northPlayer.isDealer}<span class="dealer">莊</span>{/if}
             </div>
+            <div class="hand-indicator">{northPlayer.handCount} tiles</div>
+            {#if northPlayer.melds.length > 0}
+              <div class="melds">
+                {#each northPlayer.melds as meld}
+                  <div class="meld">
+                    {#each meld.tiles as tile}
+                      <img src={tileToSvgPath(tile.tile)} alt="" class="meld-tile" />
+                    {/each}
+                  </div>
+                {/each}
+              </div>
+            {/if}
           {/if}
-        {/if}
-      </div>
-      <div class="discard-area" class:current={state.currentTurn === 3}>
-        <div class="pool-tiles">
-          {#each state.discardPiles[3].tiles as tile, i}
-            <img
-              src={tileToSvgPath(tile.tile)}
-              alt=""
-              class="discarded"
-              class:latest={i === state.discardPiles[3].tiles.length - 1 && state.currentTurn !== 3}
-            />
-          {/each}
+        </div>
+        <div class="discard-area" class:current={state.currentTurn === 3}>
+          <div class="pool-tiles">
+            {#each state.discardPiles[3].tiles as tile, i}
+              <img
+                src={tileToSvgPath(tile.tile)}
+                alt=""
+                class="discarded"
+                class:latest={i === state.discardPiles[3].tiles.length - 1 && state.currentTurn !== 3}
+              />
+            {/each}
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- West player (left) with discards to right -->
+    <!-- West player (left) - rotated 90deg clockwise to face center -->
     <div class="player-section west">
-      <div class="player-area" class:current-turn={state.currentTurn === 2}>
-        {#if westPlayer}
-          <div class="player-info vertical">
-            <span class="wind">{WIND_CHARS[2]}</span>
-            <span class="name">{westPlayer.name}</span>
-            {#if westPlayer.isDealer}<span class="dealer">莊</span>{/if}
-          </div>
-          <div class="hand-indicator">{westPlayer.handCount}</div>
-          {#if westPlayer.melds.length > 0}
-            <div class="melds vertical">
-              {#each westPlayer.melds as meld}
-                <div class="meld vertical">
-                  {#each meld.tiles as tile}
-                    <img src={tileToSvgPath(tile.tile)} alt="" class="meld-tile" />
-                  {/each}
-                </div>
-              {/each}
+      <div class="player-content">
+        <div class="player-area" class:current-turn={state.currentTurn === 2}>
+          {#if westPlayer}
+            <div class="player-info">
+              <span class="wind">{WIND_CHARS[2]}</span>
+              <span class="name">{westPlayer.name}</span>
+              {#if westPlayer.isDealer}<span class="dealer">莊</span>{/if}
             </div>
+            <div class="hand-indicator">{westPlayer.handCount} tiles</div>
+            {#if westPlayer.melds.length > 0}
+              <div class="melds">
+                {#each westPlayer.melds as meld}
+                  <div class="meld">
+                    {#each meld.tiles as tile}
+                      <img src={tileToSvgPath(tile.tile)} alt="" class="meld-tile" />
+                    {/each}
+                  </div>
+                {/each}
+              </div>
+            {/if}
           {/if}
-        {/if}
-      </div>
-      <div class="discard-area vertical" class:current={state.currentTurn === 2}>
-        <div class="pool-tiles vertical">
-          {#each state.discardPiles[2].tiles as tile, i}
-            <img
-              src={tileToSvgPath(tile.tile)}
-              alt=""
-              class="discarded"
-              class:latest={i === state.discardPiles[2].tiles.length - 1 && state.currentTurn !== 2}
-            />
-          {/each}
+        </div>
+        <div class="discard-area" class:current={state.currentTurn === 2}>
+          <div class="pool-tiles">
+            {#each state.discardPiles[2].tiles as tile, i}
+              <img
+                src={tileToSvgPath(tile.tile)}
+                alt=""
+                class="discarded"
+                class:latest={i === state.discardPiles[2].tiles.length - 1 && state.currentTurn !== 2}
+              />
+            {/each}
+          </div>
         </div>
       </div>
     </div>
@@ -113,77 +117,81 @@
       </div>
     </div>
 
-    <!-- East player (right) with discards to left -->
+    <!-- East player (right) - rotated 90deg counter-clockwise to face center -->
     <div class="player-section east">
-      <div class="discard-area vertical" class:current={state.currentTurn === 0}>
-        <div class="pool-tiles vertical">
-          {#each state.discardPiles[0].tiles as tile, i}
-            <img
-              src={tileToSvgPath(tile.tile)}
-              alt=""
-              class="discarded"
-              class:latest={i === state.discardPiles[0].tiles.length - 1 && state.currentTurn !== 0}
-            />
-          {/each}
-        </div>
-      </div>
-      <div class="player-area" class:current-turn={state.currentTurn === 0}>
-        {#if eastPlayer}
-          <div class="player-info vertical">
-            <span class="wind">{WIND_CHARS[0]}</span>
-            <span class="name">{eastPlayer.name}</span>
-            {#if eastPlayer.isDealer}<span class="dealer">莊</span>{/if}
-          </div>
-          <div class="hand-indicator">{eastPlayer.handCount}</div>
-          {#if eastPlayer.melds.length > 0}
-            <div class="melds vertical">
-              {#each eastPlayer.melds as meld}
-                <div class="meld vertical">
-                  {#each meld.tiles as tile}
-                    <img src={tileToSvgPath(tile.tile)} alt="" class="meld-tile" />
-                  {/each}
-                </div>
-              {/each}
+      <div class="player-content">
+        <div class="player-area" class:current-turn={state.currentTurn === 0}>
+          {#if eastPlayer}
+            <div class="player-info">
+              <span class="wind">{WIND_CHARS[0]}</span>
+              <span class="name">{eastPlayer.name}</span>
+              {#if eastPlayer.isDealer}<span class="dealer">莊</span>{/if}
             </div>
+            <div class="hand-indicator">{eastPlayer.handCount} tiles</div>
+            {#if eastPlayer.melds.length > 0}
+              <div class="melds">
+                {#each eastPlayer.melds as meld}
+                  <div class="meld">
+                    {#each meld.tiles as tile}
+                      <img src={tileToSvgPath(tile.tile)} alt="" class="meld-tile" />
+                    {/each}
+                  </div>
+                {/each}
+              </div>
+            {/if}
           {/if}
-        {/if}
+        </div>
+        <div class="discard-area" class:current={state.currentTurn === 0}>
+          <div class="pool-tiles">
+            {#each state.discardPiles[0].tiles as tile, i}
+              <img
+                src={tileToSvgPath(tile.tile)}
+                alt=""
+                class="discarded"
+                class:latest={i === state.discardPiles[0].tiles.length - 1 && state.currentTurn !== 0}
+              />
+            {/each}
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- South player (bottom) with discards above -->
+    <!-- South player (bottom) - discard near center, player info at edge, both rotated -->
     <div class="player-section south">
-      <div class="discard-area" class:current={state.currentTurn === 1}>
-        <div class="pool-tiles">
-          {#each state.discardPiles[1].tiles as tile, i}
-            <img
-              src={tileToSvgPath(tile.tile)}
-              alt=""
-              class="discarded"
-              class:latest={i === state.discardPiles[1].tiles.length - 1 && state.currentTurn !== 1}
-            />
-          {/each}
-        </div>
-      </div>
-      <div class="player-area" class:current-turn={state.currentTurn === 1}>
-        {#if southPlayer}
-          <div class="player-info">
-            <span class="wind">{WIND_CHARS[1]}</span>
-            <span class="name">{southPlayer.name}</span>
-            {#if southPlayer.isDealer}<span class="dealer">莊</span>{/if}
+      <div class="player-content">
+        <div class="discard-area rotated" class:current={state.currentTurn === 1}>
+          <div class="pool-tiles">
+            {#each state.discardPiles[1].tiles as tile, i}
+              <img
+                src={tileToSvgPath(tile.tile)}
+                alt=""
+                class="discarded"
+                class:latest={i === state.discardPiles[1].tiles.length - 1 && state.currentTurn !== 1}
+              />
+            {/each}
           </div>
-          <div class="hand-indicator">{southPlayer.handCount} tiles</div>
-          {#if southPlayer.melds.length > 0}
-            <div class="melds">
-              {#each southPlayer.melds as meld}
-                <div class="meld">
-                  {#each meld.tiles as tile}
-                    <img src={tileToSvgPath(tile.tile)} alt="" class="meld-tile" />
-                  {/each}
-                </div>
-              {/each}
+        </div>
+        <div class="player-area rotated" class:current-turn={state.currentTurn === 1}>
+          {#if southPlayer}
+            <div class="player-info">
+              <span class="wind">{WIND_CHARS[1]}</span>
+              <span class="name">{southPlayer.name}</span>
+              {#if southPlayer.isDealer}<span class="dealer">莊</span>{/if}
             </div>
+            <div class="hand-indicator">{southPlayer.handCount} tiles</div>
+            {#if southPlayer.melds.length > 0}
+              <div class="melds">
+                {#each southPlayer.melds as meld}
+                  <div class="meld">
+                    {#each meld.tiles as tile}
+                      <img src={tileToSvgPath(tile.tile)} alt="" class="meld-tile" />
+                    {/each}
+                  </div>
+                {/each}
+              </div>
+            {/if}
           {/if}
-        {/if}
+        </div>
       </div>
     </div>
   </div>
@@ -241,35 +249,51 @@
     min-height: 0;
   }
 
-  /* Player sections (player + their discards) */
+  /* Player sections - positioned in grid */
   .player-section {
     display: flex;
     align-items: center;
-    gap: var(--space-sm);
+    justify-content: center;
   }
 
   .player-section.north {
     grid-area: north;
-    flex-direction: column;
-    justify-content: flex-start;
   }
 
   .player-section.south {
     grid-area: south;
-    flex-direction: column;
-    justify-content: flex-end;
   }
 
   .player-section.west {
     grid-area: west;
-    flex-direction: row;
-    justify-content: flex-start;
   }
 
   .player-section.east {
     grid-area: east;
-    flex-direction: row;
-    justify-content: flex-end;
+  }
+
+  /* Player content wrapper - this gets rotated */
+  .player-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-sm);
+  }
+
+  /* Rotate player content to face outward (readable by person on that side of table) */
+  .player-section.east .player-content {
+    transform: rotate(90deg);
+  }
+
+  .player-section.west .player-content {
+    transform: rotate(-90deg);
+  }
+
+  /* North faces up naturally - readable from top of table */
+  /* South: rotate player-area to face outward, rotate discard to face center */
+  .player-section.south .player-area.rotated,
+  .player-section.south .discard-area.rotated {
+    transform: rotate(180deg);
   }
 
   /* Player areas */
@@ -296,10 +320,6 @@
     display: flex;
     align-items: center;
     gap: var(--space-sm);
-  }
-
-  .player-info.vertical {
-    flex-direction: column;
   }
 
   .wind {
@@ -336,23 +356,12 @@
     justify-content: center;
   }
 
-  .melds.vertical {
-    flex-direction: row;
-    flex-wrap: wrap;
-    max-width: 120px;
-  }
-
   .meld {
     display: flex;
     gap: 2px;
     background: rgba(0, 0, 0, 0.4);
     padding: 4px;
     border-radius: var(--radius-sm);
-  }
-
-  .meld.vertical {
-    /* Keep tiles in a row, not stacked vertically */
-    flex-direction: row;
   }
 
   .meld-tile {
@@ -425,16 +434,9 @@
     gap: 3px;
     justify-content: center;
     align-content: flex-start;
-    /* Horizontal discard piles: 6 tiles wide */
+    /* 6 tiles wide */
     width: calc(6 * clamp(1.3rem, 3.5vw, 1.8rem) + 5 * 3px);
     min-height: calc(2 * clamp(1.8rem, 4.8vw, 2.5rem) + 3px);
-  }
-
-  .pool-tiles.vertical {
-    /* Vertical discard piles: 3 tiles wide */
-    width: calc(3 * clamp(1.3rem, 3.5vw, 1.8rem) + 2 * 3px);
-    min-height: calc(4 * clamp(1.8rem, 4.8vw, 2.5rem) + 3 * 3px);
-    justify-content: flex-start;
   }
 
   .discarded {
@@ -527,11 +529,6 @@
       gap: 2px;
       width: calc(6 * 1rem + 5 * 2px);
       min-height: calc(2 * 1.4rem + 2px);
-    }
-
-    .pool-tiles.vertical {
-      width: calc(3 * 1rem + 2 * 2px);
-      min-height: calc(4 * 1.4rem + 3 * 2px);
     }
 
     .discarded {
