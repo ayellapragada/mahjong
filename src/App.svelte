@@ -89,8 +89,25 @@
       if (!session) {
         saveSession({ roomCode: route.roomCode, viewMode });
       }
+
+      // Generate QR code for table view (needed on page refresh)
+      if (route.type === 'table') {
+        generateQRCode(route.roomCode);
+      }
     }
   });
+
+  async function generateQRCode(roomCode: string) {
+    // Generate QR code for joining - use /play/ URL with base path
+    const basePath = import.meta.env.BASE_URL || '/';
+    const base = basePath.endsWith('/') ? basePath.slice(0, -1) : basePath;
+    joinUrl = `${window.location.origin}${base}/play/${roomCode}`;
+    qrCodeUrl = await QRCode.toDataURL(joinUrl, {
+      width: 200,
+      margin: 2,
+      color: { dark: "#1a0f0a", light: "#faf6e9" }
+    });
+  }
 
   async function handleCreateRoom() {
     viewMode = "table";
@@ -105,16 +122,7 @@
     saveSession({ roomCode: roomId, viewMode: 'table' });
 
     connection.connect(roomId, "table");
-
-    // Generate QR code for joining - use /play/ URL with base path
-    const basePath = import.meta.env.BASE_URL || '/';
-    const base = basePath.endsWith('/') ? basePath.slice(0, -1) : basePath;
-    joinUrl = `${window.location.origin}${base}/play/${roomId}`;
-    qrCodeUrl = await QRCode.toDataURL(joinUrl, {
-      width: 200,
-      margin: 2,
-      color: { dark: "#1a0f0a", light: "#faf6e9" }
-    });
+    generateQRCode(roomId);
   }
 
   function handleJoinRoom(roomCode: string) {
