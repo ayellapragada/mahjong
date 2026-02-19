@@ -1,8 +1,8 @@
-// party/bot.ts
-import type { Seat, GameState, CallType } from '../src/game/types';
-import { getAvailableCallsForPlayer } from '../src/game/calls';
-import { canDeclareWin } from '../src/game/engine';
-import { getRuleset } from '../src/game/rulesets';
+// party/bot/bot.ts
+import type { Seat, GameState, CallType } from '../../src/game/types';
+import { getAvailableCallsForPlayer } from '../../src/game/calls';
+import { canDeclareWin } from '../../src/game/engine';
+import { getRuleset } from '../../src/game/rulesets';
 
 export type BotAction =
   | { type: 'discard'; tileId: string }
