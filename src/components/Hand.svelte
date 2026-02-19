@@ -3,7 +3,7 @@
   import { sortTiles } from "../game/types";
   import { untrack } from "svelte";
   import Tile from "./Tile.svelte";
-  import { getTileInfo } from "../lib/tiles";
+  import { getTileInfo, tileToSvgPath } from "../lib/tiles";
   import { vibrate } from "../lib/haptics";
   import { playSound } from "../lib/sounds";
 
@@ -232,15 +232,19 @@
 
   <!-- Tile info panel - always visible to prevent layout shift -->
   <div class="tile-info-panel" class:has-selection={selectedTileInfo}>
-    {#if selectedTileInfo}
-      <span class="info-unicode">{selectedTileInfo.unicode}</span>
+    {#if selectedTile && selectedTileInfo}
+      <div class="info-tile-wrapper">
+        <img src={tileToSvgPath(selectedTile.tile)} alt="" class="info-tile-svg" />
+      </div>
       <div class="tile-info-details">
         <span class="info-name">{selectedTileInfo.name}</span>
         <span class="info-type">{selectedTileInfo.type}</span>
         <span class="info-desc">{selectedTileInfo.description}</span>
       </div>
     {:else}
-      <span class="info-unicode placeholder">🀄</span>
+      <div class="info-tile-wrapper placeholder">
+        <div class="info-tile-placeholder"></div>
+      </div>
       <div class="tile-info-details">
         <span class="info-name placeholder">Tap a tile for info</span>
         <span class="info-type placeholder">—</span>
@@ -347,15 +351,34 @@
     border-color: rgba(212, 168, 75, 0.3);
   }
 
-  .info-unicode {
-    font-size: 2rem;
-    line-height: 1;
+  .info-tile-wrapper {
     flex-shrink: 0;
-    transition: opacity 0.2s ease;
+    padding: 3px;
+    border: 2px solid var(--tile-border);
+    border-radius: var(--radius-md);
+    background: linear-gradient(180deg, var(--tile-face) 0%, var(--tile-shadow) 100%);
+    box-shadow:
+      0 2px 6px rgba(0, 0, 0, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    transition: all 0.2s ease;
   }
 
-  .info-unicode.placeholder {
+  .info-tile-wrapper.placeholder {
     opacity: 0.3;
+  }
+
+  .info-tile-svg {
+    width: 1.8rem;
+    height: 2.5rem;
+    object-fit: contain;
+    display: block;
+  }
+
+  .info-tile-placeholder {
+    width: 1.8rem;
+    height: 2.5rem;
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 2px;
   }
 
   .tile-info-details {
@@ -519,8 +542,14 @@
       min-height: 3rem;
     }
 
-    .info-unicode {
-      font-size: 1.5rem;
+    .info-tile-svg {
+      width: 1.4rem;
+      height: 2rem;
+    }
+
+    .info-tile-placeholder {
+      width: 1.4rem;
+      height: 2rem;
     }
 
     .info-name {
@@ -565,8 +594,18 @@
       min-height: 2.5rem;
     }
 
-    .info-unicode {
-      font-size: 1.2rem;
+    .info-tile-wrapper {
+      padding: 2px;
+    }
+
+    .info-tile-svg {
+      width: 1.1rem;
+      height: 1.5rem;
+    }
+
+    .info-tile-placeholder {
+      width: 1.1rem;
+      height: 1.5rem;
     }
 
     .info-name {
