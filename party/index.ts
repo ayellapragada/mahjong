@@ -41,6 +41,8 @@ export class MahjongRoom extends Server {
     const mode = url.searchParams.get("mode");
     const isTableMode = mode === "table";
 
+    console.log(`[${this.state.roomCode}] onConnect: mode=${mode}, isTableMode=${isTableMode}, phase=${this.state.phase}`);
+
     if (isTableMode) {
       this.tableConnections.add(conn.id);
       console.log(`[${this.state.roomCode}] Table connection: ${conn.id}`);
@@ -57,7 +59,10 @@ export class MahjongRoom extends Server {
 
     // If game is already playing, send current state immediately
     if (this.state.phase === "playing") {
+      console.log(`[${this.state.roomCode}] Game is playing, sending STATE_UPDATE to ${conn.id}`);
       this.sendStateToConnection(conn);
+    } else {
+      console.log(`[${this.state.roomCode}] Game phase is ${this.state.phase}, NOT sending STATE_UPDATE`);
     }
   }
 
