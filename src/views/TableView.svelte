@@ -25,8 +25,10 @@
 
 <div class="table-view">
   <header>
-    <div class="room-badge">{state.roomCode}</div>
-    <FullscreenButton />
+    <div class="header-left">
+      <div class="room-badge">{state.roomCode}</div>
+      <FullscreenButton />
+    </div>
     <div class="wall-count">{state.wallCount} tiles remaining</div>
   </header>
 
@@ -235,6 +237,12 @@
     color: var(--text-secondary);
     font-size: 1.1rem;
     font-family: var(--font-body);
+  }
+
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
   }
 
   .table {
