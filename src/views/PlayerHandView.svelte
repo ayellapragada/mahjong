@@ -5,6 +5,7 @@
   import CallPrompt from "../components/CallPrompt.svelte";
   import ActionLog from "../components/ActionLog.svelte";
   import { vibrate } from "../lib/haptics";
+  import FullscreenButton from "../components/FullscreenButton.svelte";
 
   interface Props {
     gameState: ClientGameState;
@@ -89,6 +90,7 @@
       {/if}
     </div>
     <div class="header-right">
+      <FullscreenButton />
       <button class="history-btn" onclick={() => historyOpen = true}>History</button>
       <div class="room-code">{gameState.roomCode}</div>
     </div>
