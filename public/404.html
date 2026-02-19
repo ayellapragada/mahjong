@@ -5,13 +5,13 @@
     <title>mahjong</title>
     <script>
       // Single Page Apps for GitHub Pages
-      // Store the original URL and redirect to index.html
-      // The index.html will restore the URL using history.replaceState
-      sessionStorage.redirect = location.href;
-      // Redirect to base path (keep /mahjong/)
+      // Redirect to index.html with the original path as a query parameter
+      // This works in Safari private mode where sessionStorage fails
       var pathSegmentsToKeep = 1;
       var basePath = location.pathname.split('/').slice(0, 1 + pathSegmentsToKeep).join('/') + '/';
-      location.replace(basePath);
+      // Encode the full path (after base) to pass as query param
+      var fullPath = location.pathname + location.search + location.hash;
+      location.replace(basePath + '?redirect=' + encodeURIComponent(fullPath));
     </script>
   </head>
   <body>
