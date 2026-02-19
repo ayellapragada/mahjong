@@ -71,6 +71,9 @@
 
   // History modal state
   let historyOpen = $state(false);
+
+  // Highlighted tiles for call preview
+  let highlightedTileIds = $state<string[]>([]);
 </script>
 
 <div class="player-hand-view">
@@ -168,6 +171,7 @@
       tiles={gameState.myHand}
       {canDiscard}
       onDiscard={handleDiscardWithHaptic}
+      {highlightedTileIds}
     />
   </div>
 
@@ -178,6 +182,7 @@
       discardedTile={gameState.lastDiscard?.tile}
       discardedBy={lastDiscardPlayer ?? undefined}
       {onCall}
+      onHighlight={(ids) => highlightedTileIds = ids}
     />
   {/if}
 

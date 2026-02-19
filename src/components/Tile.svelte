@@ -5,11 +5,12 @@
   interface Props {
     tile: TileInstance;
     selected?: boolean;
+    highlighted?: boolean;
     disabled?: boolean;
     onclick?: () => void;
   }
 
-  let { tile, selected = false, disabled = false, onclick }: Props = $props();
+  let { tile, selected = false, highlighted = false, disabled = false, onclick }: Props = $props();
 
   // Get number for suited tiles
   const tileNumber = $derived(
@@ -20,6 +21,7 @@
 <button
   class="tile"
   class:selected
+  class:highlighted
   class:disabled
   onclick={onclick}
   {disabled}
@@ -92,6 +94,31 @@
       inset 0 1px 0 rgba(255, 255, 255, 0.9);
   }
 
+  .tile.highlighted {
+    transform: translateY(-4px);
+    border-color: #4ecdc4;
+    box-shadow:
+      0 6px 12px rgba(0, 0, 0, 0.25),
+      0 0 16px rgba(78, 205, 196, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    animation: highlightPulse 0.8s ease-in-out infinite;
+  }
+
+  @keyframes highlightPulse {
+    0%, 100% {
+      box-shadow:
+        0 6px 12px rgba(0, 0, 0, 0.25),
+        0 0 16px rgba(78, 205, 196, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    }
+    50% {
+      box-shadow:
+        0 6px 12px rgba(0, 0, 0, 0.25),
+        0 0 24px rgba(78, 205, 196, 0.7),
+        inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    }
+  }
+
   .tile.disabled {
     opacity: 0.6;
     cursor: not-allowed;
@@ -121,6 +148,10 @@
 
     .tile.selected {
       transform: translateY(-4px);
+    }
+
+    .tile.highlighted {
+      transform: translateY(-3px);
     }
   }
 

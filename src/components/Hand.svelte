@@ -11,9 +11,10 @@
     tiles: TileInstance[];
     canDiscard: boolean;
     onDiscard?: (tileId: string) => void;
+    highlightedTileIds?: string[];
   }
 
-  let { tiles, canDiscard, onDiscard }: Props = $props();
+  let { tiles, canDiscard, onDiscard, highlightedTileIds = [] }: Props = $props();
   let selectedTileId: string | null = $state(null);
 
   // Get info for selected tile
@@ -273,6 +274,7 @@
         <Tile
           {tile}
           selected={selectedTileId === tile.id}
+          highlighted={highlightedTileIds.includes(tile.id)}
           disabled={!canDiscard}
           onclick={() => handleTileClick(tile.id)}
         />

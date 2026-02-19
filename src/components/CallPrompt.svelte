@@ -8,11 +8,33 @@
     discardedTile?: TileInstance;
     discardedBy?: string;
     onCall: (type: string, tileIds: string[]) => void;
+    onHighlight?: (tileIds: string[]) => void;
   }
 
-  let { calls, discardedTile, discardedBy, onCall }: Props = $props();
+  let { calls, discardedTile, discardedBy, onCall, onHighlight }: Props = $props();
 
   let selectedChiCombo = $state<number | null>(null);
+
+  // Collect all tile IDs that could be used for any call
+  const allCallTileIds = $derived(() => {
+    const ids = new Set<string>();
+    for (const call of calls) {
+      if (call.tiles) {
+        for (const combo of call.tiles) {
+          for (const tile of combo) {
+            ids.add(tile.id);
+          }
+        }
+      }
+    }
+    return Array.from(ids);
+  });
+
+  // Highlight all callable tiles when prompt appears, clear on unmount
+  $effect(() => {
+    onHighlight?.(allCallTileIds());
+    return () => onHighlight?.([]);
+  });
 
   const hasChi = $derived(calls.some(c => c.type === "chi"));
   const hasPeng = $derived(calls.some(c => c.type === "peng"));
