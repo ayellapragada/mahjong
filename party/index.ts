@@ -1,73 +1,87 @@
+// party/index.ts
 import { routePartykitRequest, Server } from "partyserver";
 import type { Connection, ConnectionContext } from "partyserver";
-import type { GameState, ClientAction, ServerMessage, Seat } from "../src/game/types";
-import { BotPlayer, type BotAction } from "./bot";
+import type { GameState, ClientAction, Seat } from "../src/game/types";
+import { createInitialState, removePlayer, generateRoomCode } from "../src/game/engine";
+
+// Import modules
 import {
-  createInitialState,
-  addPlayer,
-  removePlayer,
-  startGame,
-  startNextRound,
-  drawTile,
-  discardTile,
-  getClientState,
-  getTableState,
-  generateRoomCode,
-  logAction,
-} from "../src/game/engine";
-import { registerCall, resolveCallWindow } from "../src/game/calls";
-import { getRuleset } from "../src/game/rulesets";
-import { declareSelfDrawWin, declareDiscardWin } from "../src/game/win";
+  sendToConnection,
+  sendError,
+  broadcastRoomInfo,
+  broadcastGameState,
+  sendStateToConnection,
+  broadcastGameOver,
+  type BroadcastContext,
+} from "./broadcast";
+import {
+  createBotManager,
+  getBotNeedingAction,
+  type BotManager,
+} from "./bot/manager";
+import {
+  handleBotDiscard,
+  handleBotCall,
+  handleBotPass,
+  handleBotWin,
+} from "./bot/actions";
+import {
+  handleJoin,
+  handleRejoin,
+  handleStartGame,
+} from "./handlers/lobby";
+import {
+  handleDiscard,
+  handleCall,
+  handleDeclareWin,
+} from "./handlers/gameplay";
+import { handleStartNextRound } from "./handlers/rounds";
 
 export class MahjongRoom extends Server {
   state!: GameState;
-  bots: Map<Seat, BotPlayer> = new Map();
-  pendingBotAction?: { seat: Seat; scheduledAt: number };
+  botManager: BotManager = createBotManager();
   lastWinner?: Seat;
-  // Track which connections are table-only (iPad) vs player (phone)
   tableConnections: Set<string> = new Set();
 
+  private get broadcastCtx(): BroadcastContext {
+    return {
+      getConnections: () => this.getConnections(),
+      tableConnections: this.tableConnections,
+    };
+  }
+
   onStart() {
-    // Initialize with a generated room code
-    // this.name is the room identifier from the URL
     const roomCode = this.name.length === 4 ? this.name : generateRoomCode();
     this.state = createInitialState(roomCode, "hongkong");
     console.log(`[${this.state.roomCode}] Room started`);
   }
 
   onConnect(conn: Connection, ctx: ConnectionContext) {
-    // Check if this is a table-only connection via query param
     const url = new URL(ctx.request.url);
     const mode = url.searchParams.get("mode");
-    const isTableMode = mode === "table";
 
-    if (isTableMode) {
+    if (mode === "table") {
       this.tableConnections.add(conn.id);
     }
 
-    // Send current room info to new connection
-    this.sendToConnection(conn, {
+    sendToConnection(conn, {
       type: "ROOM_INFO",
       roomCode: this.state.roomCode,
       players: this.state.players.map(p => ({ name: p.name, seat: p.seat })),
     });
 
-    // If game is already playing, send current state immediately
     if (this.state.phase === "playing") {
-      this.sendStateToConnection(conn);
+      sendStateToConnection(this.broadcastCtx, conn, this.state);
     }
   }
 
   onClose(conn: Connection) {
     console.log(`[${this.state.roomCode}] Disconnected: ${conn.id}`);
-
-    // Clean up table connection tracking
     this.tableConnections.delete(conn.id);
 
-    // Remove player if game hasn't started
     if (this.state.phase === "waiting") {
       this.state = removePlayer(this.state, conn.id);
-      this.broadcastRoomInfo();
+      broadcastRoomInfo(this.broadcastCtx, this.state);
     }
   }
 
@@ -76,646 +90,144 @@ export class MahjongRoom extends Server {
     try {
       action = JSON.parse(message as string);
     } catch {
-      this.sendError(sender, "Invalid message format");
+      sendError(sender, "Invalid message format");
       return;
     }
 
     console.log(`[${this.state.roomCode}] Action from ${sender.id}:`, action.type);
+    this.handleAction(sender, action);
+  }
+
+  private async handleAction(sender: Connection, action: ClientAction) {
+    const lobbyCtx = { botManager: this.botManager };
 
     switch (action.type) {
-      case "JOIN":
-        this.handleJoin(sender, action.name, action.seat);
+      case "JOIN": {
+        const result = handleJoin(lobbyCtx, this.state, sender.id, action.name, action.seat);
+        if ("error" in result) { sendError(sender, result.error); return; }
+        this.state = result.state;
+        if (result.shouldBroadcastRoom) broadcastRoomInfo(this.broadcastCtx, this.state);
+        if (result.shouldBroadcastGame) broadcastGameState(this.broadcastCtx, this.state);
+        await this.scheduleBotActions();
         break;
-      case "START_GAME":
-        this.handleStartGame(sender);
+      }
+      case "REJOIN": {
+        const result = handleRejoin(this.state, sender.id, action.name, action.seat);
+        if ("error" in result) { sendError(sender, result.error); return; }
+        this.state = result.state;
+        if (result.shouldBroadcastGame) broadcastGameState(this.broadcastCtx, this.state);
         break;
-      case "DISCARD":
-        this.handleDiscard(sender, action.tileId);
+      }
+      case "START_GAME": {
+        const result = handleStartGame(lobbyCtx, this.state, sender.id);
+        if ("error" in result) { sendError(sender, result.error); return; }
+        this.state = result.state;
+        broadcastGameState(this.broadcastCtx, this.state);
+        await this.scheduleBotActions();
         break;
+      }
+      case "DISCARD": {
+        const result = handleDiscard(this.state, sender.id, action.tileId);
+        if ("error" in result) { sendError(sender, result.error); return; }
+        this.state = result.state;
+        broadcastGameState(this.broadcastCtx, this.state);
+        if (result.isDraw) { this.broadcastDraw(); return; }
+        await this.scheduleBotActions();
+        break;
+      }
       case "CALL_CHI":
-        this.handleCall(sender, "chi", action.tileIds);
-        break;
       case "CALL_PENG":
-        this.handleCall(sender, "peng", action.tileIds);
-        break;
       case "CALL_GANG":
-        this.handleCall(sender, "gang", action.tileIds);
+      case "PASS": {
+        const callType = action.type === "PASS" ? "pass" : action.type.replace("CALL_", "").toLowerCase() as any;
+        const tileIds = action.type === "PASS" ? [] : (action as any).tileIds;
+        const result = handleCall(this.state, sender.id, callType, tileIds);
+        if ("error" in result) { sendError(sender, result.error); return; }
+        this.state = result.state;
+        if (result.gameOver) {
+          this.lastWinner = result.gameOver.winner;
+          broadcastGameOver(this.broadcastCtx, this.state, result.gameOver.winner, result.gameOver.breakdown, result.gameOver.isSelfDrawn);
+        }
+        broadcastGameState(this.broadcastCtx, this.state);
+        if (result.isDraw) { this.broadcastDraw(); return; }
+        await this.scheduleBotActions();
         break;
-      case "PASS":
-        this.handleCall(sender, "pass", []);
+      }
+      case "DECLARE_WIN": {
+        const result = handleDeclareWin(this.state, sender.id);
+        if ("error" in result) { sendError(sender, result.error); return; }
+        this.state = result.state;
+        if (result.gameOver) {
+          this.lastWinner = result.gameOver.winner;
+          broadcastGameOver(this.broadcastCtx, this.state, result.gameOver.winner, result.gameOver.breakdown, result.gameOver.isSelfDrawn);
+        }
+        broadcastGameState(this.broadcastCtx, this.state);
         break;
-      case "DECLARE_WIN":
-        this.handleDeclareWin(sender);
+      }
+      case "START_NEXT_ROUND": {
+        const result = handleStartNextRound(this.state, sender.id, this.lastWinner);
+        if ("error" in result) { sendError(sender, result.error); return; }
+        this.state = result.state;
+        this.lastWinner = undefined;
+        broadcastGameState(this.broadcastCtx, this.state);
+        await this.scheduleBotActions();
         break;
-      case "START_NEXT_ROUND":
-        this.handleStartNextRound(sender);
-        break;
-      case "REJOIN":
-        this.handleRejoin(sender, action.name, action.seat);
-        break;
+      }
       default:
-        this.sendError(sender, `Unknown action: ${(action as any).type}`);
+        sendError(sender, `Unknown action: ${(action as any).type}`);
     }
   }
 
-  // ============================================================================
-  // ACTION HANDLERS
-  // ============================================================================
+  private async scheduleBotActions() {
+    const botAction = getBotNeedingAction(this.botManager, this.state);
+    if (!botAction) return;
 
-  async handleJoin(conn: Connection, name: string, seat: Seat) {
-    // Check if a bot occupies this seat
-    if (this.bots.has(seat)) {
-      // Remove the bot player from state first
-      const botId = `bot-${seat}`;
-      this.state = removePlayer(this.state, botId);
-
-      // Bump the bot
-      this.bumpBot(seat);
-    }
-
-    const result = addPlayer(this.state, conn.id, name, seat);
-
-    if ("error" in result) {
-      this.sendError(conn, result.error);
-      return;
-    }
-
-    this.state = result;
-    this.broadcastRoomInfo();
-
-    // If game is in progress, send state and schedule bot actions
-    if (this.state.phase === 'playing') {
-      this.broadcastGameState();
-      await this.scheduleBotActions();
-    }
-  }
-
-  handleRejoin(conn: Connection, name: string, seat: Seat) {
-    // Only allow rejoin during active game
-    if (this.state.phase === "waiting") {
-      this.sendError(conn, "Cannot rejoin during lobby - please take a seat normally");
-      return;
-    }
-
-    // Find the player at this seat
-    const seatPlayer = this.state.players.find(p => p.seat === seat);
-
-    if (!seatPlayer) {
-      this.sendError(conn, "No player at that seat");
-      return;
-    }
-
-    // Validate the name matches
-    if (seatPlayer.name !== name) {
-      this.sendError(conn, "Name does not match seat");
-      return;
-    }
-
-    // Update the player's connection ID to this new connection
-    seatPlayer.id = conn.id;
-
-    console.log(`[${this.state.roomCode}] Player ${name} rejoined seat ${seat}`);
-
-    // Send current state to the rejoined player
-    this.broadcastGameState();
-  }
-
-  async handleStartGame(conn: Connection) {
-    // Only allow starting if player is in the game
-    const player = this.state.players.find(p => p.id === conn.id);
-    if (!player) {
-      this.sendError(conn, "You must join the game first");
-      return;
-    }
-
-    // Fill empty seats with bots
-    this.fillEmptySeatsWithBots();
-
-    const ruleset = getRuleset(this.state.rulesetId);
-    const result = startGame(this.state, ruleset);
-
-    if ("error" in result) {
-      this.sendError(conn, result.error);
-      return;
-    }
-
-    this.state = result;
-
-    // Dealer draws first tile
-    const drawResult = drawTile(this.state, ruleset);
-    if (!("error" in drawResult)) {
-      this.state = drawResult;
-    }
-
-    this.broadcastGameState();
-
-    // Schedule bot actions if any bots are playing
-    await this.scheduleBotActions();
-  }
-
-  async handleDiscard(conn: Connection, tileId: string) {
-    const player = this.state.players.find(p => p.id === conn.id);
-    if (!player) {
-      this.sendError(conn, "You are not in this game");
-      return;
-    }
-
-    const discardedTile = player.hand.find(t => t.id === tileId);
-    const ruleset = getRuleset(this.state.rulesetId);
-    const result = discardTile(this.state, player.seat, tileId, ruleset);
-
-    if ("error" in result) {
-      this.sendError(conn, result.error);
-      return;
-    }
-
-    this.state = result;
-
-    if (discardedTile) {
-      this.state = logAction(this.state, 'discard', player.seat, discardedTile);
-    }
-
-    if (this.state.turnPhase === "drawing") {
-      const drawResult = drawTile(this.state, ruleset);
-      if (!("error" in drawResult)) {
-        this.state = drawResult;
-      }
-    }
-
-    this.broadcastGameState();
-    if (this.checkForDraw()) return;
-    await this.scheduleBotActions();
-  }
-
-  async handleCall(conn: Connection, callType: "chi" | "peng" | "gang" | "pass" | "win", tileIds: string[]) {
-    const player = this.state.players.find(p => p.id === conn.id);
-    if (!player) {
-      this.sendError(conn, "You are not in this game");
-      return;
-    }
-
-    if (this.state.turnPhase !== "waiting_for_calls") {
-      this.sendError(conn, "Not waiting for calls");
-      return;
-    }
-
-    if (!this.state.awaitingCallFrom.includes(player.seat)) {
-      this.sendError(conn, "Not expecting a call from you");
-      return;
-    }
-
-    // Handle win call specially
-    if (callType === 'win') {
-      // Register the win call
-      this.state = registerCall(this.state, player.seat, 'win', []);
-
-      const ruleset = getRuleset(this.state.rulesetId);
-      const resolved = resolveCallWindow(this.state, ruleset);
-
-      // Check if win was the winning call (highest priority)
-      if (resolved.pendingCalls.length > 0 && resolved.pendingCalls[0].callType === 'win') {
-        // Process the win
-        const result = declareDiscardWin(this.state, resolved.pendingCalls[0].seat, ruleset);
-        if (!("error" in result)) {
-          this.state = result.state;
-          this.lastWinner = result.winner;
-
-          const winnerPlayer = this.state.players.find(p => p.seat === result.winner);
-          for (const c of this.getConnections()) {
-            this.sendToConnection(c, {
-              type: "GAME_OVER",
-              winner: result.winner,
-              scores: this.state.scores,
-              breakdown: result.breakdown,
-              winnerName: winnerPlayer?.name ?? '',
-              winningHand: winnerPlayer?.hand ?? [],
-              winningMelds: winnerPlayer?.melds ?? [],
-              isSelfDrawn: result.isSelfDrawn,
-            });
-          }
-        }
-      } else {
-        this.state = resolved;
-      }
-
-      this.broadcastGameState();
-      await this.scheduleBotActions();
-      return;
-    }
-
-    // Register the call
-    this.state = registerCall(this.state, player.seat, callType, tileIds);
-
-    // Try to resolve if all responses received
-    const ruleset = getRuleset(this.state.rulesetId);
-    const resolved = resolveCallWindow(this.state, ruleset);
-
-    if (resolved !== this.state) {
-      this.state = resolved;
-
-      // If someone won a call and needs to draw (gang), do it
-      if (this.state.turnPhase === "replacing") {
-        const drawResult = drawTile(this.state, ruleset);
-        if (!("error" in drawResult)) {
-          this.state = drawResult;
-        }
-      }
-      // If all passed and next player needs to draw
-      else if (this.state.turnPhase === "drawing") {
-        const drawResult = drawTile(this.state, ruleset);
-        if (!("error" in drawResult)) {
-          this.state = drawResult;
-        }
-      }
-    }
-
-    this.broadcastGameState();
-    if (this.checkForDraw()) return;
-    await this.scheduleBotActions();
-  }
-
-  handleDeclareWin(conn: Connection) {
-    const player = this.state.players.find(p => p.id === conn.id);
-    if (!player) {
-      this.sendError(conn, "You are not in this game");
-      return;
-    }
-
-    const ruleset = getRuleset(this.state.rulesetId);
-
-    // Determine if self-draw or discard win
+    const { seat, action } = botAction;
     let result;
-    if (this.state.turnPhase === 'discarding' && this.state.currentTurn === player.seat) {
-      result = declareSelfDrawWin(this.state, player.seat, ruleset);
-    } else if (this.state.turnPhase === 'waiting_for_calls') {
-      result = declareDiscardWin(this.state, player.seat, ruleset);
-    } else {
-      this.sendError(conn, "Cannot declare win now");
-      return;
-    }
-
-    if ("error" in result) {
-      this.sendError(conn, result.error);
-      return;
-    }
-
-    this.state = result.state;
-    this.lastWinner = result.winner;
-
-    // Broadcast game over with winner info
-    const winnerPlayer = this.state.players.find(p => p.seat === result.winner);
-    for (const c of this.getConnections()) {
-      this.sendToConnection(c, {
-        type: "GAME_OVER",
-        winner: result.winner,
-        scores: this.state.scores,
-        breakdown: result.breakdown,
-        winnerName: winnerPlayer?.name ?? '',
-        winningHand: winnerPlayer?.hand ?? [],
-        winningMelds: winnerPlayer?.melds ?? [],
-        isSelfDrawn: result.isSelfDrawn,
-      });
-    }
-
-    // Also send final state
-    this.broadcastGameState();
-  }
-
-  async handleStartNextRound(conn: Connection) {
-    const player = this.state.players.find(p => p.id === conn.id);
-    if (!player) {
-      this.sendError(conn, "You are not in this game");
-      return;
-    }
-
-    if (this.state.phase !== 'finished') {
-      this.sendError(conn, "Game not finished");
-      return;
-    }
-
-    const ruleset = getRuleset(this.state.rulesetId);
-    const result = startNextRound(this.state, ruleset, this.lastWinner);
-
-    if ("error" in result) {
-      this.sendError(conn, result.error);
-      return;
-    }
-
-    this.state = result;
-    this.lastWinner = undefined;
-
-    // Dealer draws first tile
-    const drawResult = drawTile(this.state, ruleset);
-    if (!("error" in drawResult)) {
-      this.state = drawResult;
-    }
-
-    this.broadcastGameState();
-    await this.scheduleBotActions();
-  }
-
-  // ============================================================================
-  // BOT MANAGEMENT
-  // ============================================================================
-
-  fillEmptySeatsWithBots() {
-    const occupiedSeats = new Set(this.state.players.map(p => p.seat));
-
-    for (const seat of [0, 1, 2, 3] as Seat[]) {
-      if (!occupiedSeats.has(seat)) {
-        const bot = new BotPlayer(seat);
-        this.bots.set(seat, bot);
-
-        // Add bot as a player (using seat as a fake connection ID)
-        const result = addPlayer(this.state, `bot-${seat}`, bot.name, seat);
-        if (!("error" in result)) {
-          this.state = result;
-        }
-      }
-    }
-  }
-
-  bumpBot(seat: Seat) {
-    // Clear pending action if it was for this bot
-    if (this.pendingBotAction?.seat === seat) {
-      this.pendingBotAction = undefined;
-    }
-
-    // Remove from bots map
-    this.bots.delete(seat);
-
-    console.log(`[${this.state.roomCode}] Human bumped bot at seat ${seat}`);
-  }
-
-  clearAllBots() {
-    this.pendingBotAction = undefined;
-    this.bots.clear();
-  }
-
-  async scheduleBotActions() {
-    if (this.state.phase !== 'playing') return;
-
-    // Find the first bot that needs to act
-    for (const [seat, bot] of this.bots) {
-      const needsToAct = (this.state.currentTurn === seat && this.state.turnPhase === 'discarding') ||
-                         (this.state.turnPhase === 'waiting_for_calls' && this.state.awaitingCallFrom.includes(seat));
-
-      if (needsToAct) {
-        const action = bot.decideAction(this.state);
-        if (action) {
-          await this.executeBotAction(seat, action);
-        }
-        return;
-      }
-    }
-  }
-
-  async executeBotAction(seat: Seat, action: BotAction) {
-    if (!this.bots.has(seat)) return;
 
     switch (action.type) {
       case 'discard':
-        await this.handleBotDiscard(seat, action.tileId);
+        result = handleBotDiscard(this.botManager, this.state, seat, action.tileId);
         break;
       case 'call':
-        await this.handleBotCall(seat, action.callType, action.tileIds);
+        result = handleBotCall(this.botManager, this.state, seat, action.callType, action.tileIds);
         break;
       case 'pass':
-        await this.handleBotPass(seat);
+        result = handleBotPass(this.botManager, this.state, seat);
         break;
       case 'win':
-        this.handleBotWin(seat);
+        result = handleBotWin(this.botManager, this.state, seat);
         break;
     }
-  }
 
-  async handleBotDiscard(seat: Seat, tileId: string) {
-    const botPlayer = this.state.players.find(p => p.seat === seat);
-    const discardedTile = botPlayer?.hand.find(t => t.id === tileId);
-
-    const ruleset = getRuleset(this.state.rulesetId);
-    const result = discardTile(this.state, seat, tileId, ruleset);
-
-    if ("error" in result) {
-      return;
-    }
-
-    this.state = result;
-
-    if (discardedTile) {
-      this.state = logAction(this.state, 'discard', seat, discardedTile);
-    }
-
-    if (this.state.turnPhase === "drawing") {
-      const drawResult = drawTile(this.state, ruleset);
-      if (!("error" in drawResult)) {
-        this.state = drawResult;
-      }
-    }
-
-    this.broadcastGameState();
-    if (this.checkForDraw()) return;
-    await this.scheduleBotActions();
-  }
-
-  async handleBotCall(seat: Seat, callType: 'chi' | 'peng' | 'gang', tileIds: string[]) {
-    if (this.state.turnPhase !== "waiting_for_calls") return;
-    if (!this.state.awaitingCallFrom.includes(seat)) return;
-
-    const calledTile = this.state.lastDiscard?.tile;
-    const fromSeat = this.state.lastDiscard?.from;
-
-    this.state = registerCall(this.state, seat, callType, tileIds);
-
-    const ruleset = getRuleset(this.state.rulesetId);
-    const resolved = resolveCallWindow(this.state, ruleset);
-
-    if (resolved !== this.state) {
-      this.state = resolved;
-
-      if (this.state.currentTurn === seat && calledTile) {
-        this.state = logAction(this.state, callType, seat, calledTile, fromSeat);
-      }
-
-      if (this.state.turnPhase === "replacing" || this.state.turnPhase === "drawing") {
-        const drawResult = drawTile(this.state, ruleset);
-        if (!("error" in drawResult)) {
-          this.state = drawResult;
-        }
-      }
-    }
-
-    this.broadcastGameState();
-    if (this.checkForDraw()) return;
-    await this.scheduleBotActions();
-  }
-
-  async handleBotPass(seat: Seat) {
-    if (this.state.turnPhase !== "waiting_for_calls") return;
-    if (!this.state.awaitingCallFrom.includes(seat)) return;
-
-    this.state = registerCall(this.state, seat, 'pass', []);
-
-    const ruleset = getRuleset(this.state.rulesetId);
-    const resolved = resolveCallWindow(this.state, ruleset);
-
-    if (resolved !== this.state) {
-      this.state = resolved;
-
-      if (this.state.turnPhase === "drawing") {
-        const drawResult = drawTile(this.state, ruleset);
-        if (!("error" in drawResult)) {
-          this.state = drawResult;
-        }
-      }
-    }
-
-    this.broadcastGameState();
-    if (this.checkForDraw()) return;
-    await this.scheduleBotActions();
-  }
-
-  handleBotWin(seat: Seat) {
-    const ruleset = getRuleset(this.state.rulesetId);
-
-    // Determine if self-draw or discard win
-    let result;
-    if (this.state.turnPhase === 'discarding' && this.state.currentTurn === seat) {
-      result = declareSelfDrawWin(this.state, seat, ruleset);
-    } else if (this.state.turnPhase === 'waiting_for_calls') {
-      result = declareDiscardWin(this.state, seat, ruleset);
-    } else {
-      console.error(`[${this.state.roomCode}] Bot ${seat} tried to win at invalid time`);
-      return;
-    }
-
-    if ("error" in result) {
-      console.error(`[${this.state.roomCode}] Bot win error:`, result.error);
-      return;
-    }
+    if (!result || "error" in result) return;
 
     this.state = result.state;
-    this.lastWinner = result.winner;
 
-    // Broadcast game over with winner info
-    const winnerPlayer = this.state.players.find(p => p.seat === result.winner);
-    for (const c of this.getConnections()) {
-      this.sendToConnection(c, {
-        type: "GAME_OVER",
-        winner: result.winner,
-        scores: this.state.scores,
-        breakdown: result.breakdown,
-        winnerName: winnerPlayer?.name ?? '',
-        winningHand: winnerPlayer?.hand ?? [],
-        winningMelds: winnerPlayer?.melds ?? [],
-        isSelfDrawn: result.isSelfDrawn,
-      });
+    if (result.gameOver) {
+      this.lastWinner = result.gameOver.winner;
+      broadcastGameOver(this.broadcastCtx, this.state, result.gameOver.winner, result.gameOver.breakdown, result.gameOver.isSelfDrawn);
     }
 
-    this.broadcastGameState();
-  }
+    broadcastGameState(this.broadcastCtx, this.state);
 
-  // ============================================================================
-  // BROADCAST HELPERS
-  // ============================================================================
-
-  broadcastRoomInfo() {
-    const message: ServerMessage = {
-      type: "ROOM_INFO",
-      roomCode: this.state.roomCode,
-      players: this.state.players.map(p => ({ name: p.name, seat: p.seat })),
-    };
-
-    for (const conn of this.getConnections()) {
-      this.sendToConnection(conn, message);
+    if (result.isDraw) {
+      this.broadcastDraw();
+      return;
     }
+
+    await this.scheduleBotActions();
   }
 
-  broadcastGameState() {
-    for (const conn of this.getConnections()) {
-      this.sendStateToConnection(conn);
-    }
-  }
-
-  sendStateToConnection(conn: Connection) {
-    // Table connections always get table-only state (no hands)
-    const isTableConnection = this.tableConnections.has(conn.id);
-
-    if (isTableConnection) {
-      // Table view (iPad) - shows all players but no hands
-      const tableState = getTableState(this.state);
-      this.sendToConnection(conn, {
-        type: "STATE_UPDATE",
-        state: {
-          ...tableState,
-          mySeat: 0 as Seat, // Dummy value for table view
-          myHand: [],
-          myMelds: [],
-          myBonusTiles: [],
-        },
-      });
-    } else {
-      // Player connection - check if they're a player in the game
-      const clientState = getClientState(this.state, conn.id);
-
-      if (clientState) {
-        // Player view - shows their own hand
-        this.sendToConnection(conn, {
-          type: "STATE_UPDATE",
-          state: clientState,
-        });
-      } else {
-        // Spectator (not a table, not a player) - generic view
-        const tableState = getTableState(this.state);
-        this.sendToConnection(conn, {
-          type: "STATE_UPDATE",
-          state: {
-            ...tableState,
-            mySeat: 0 as Seat,
-            myHand: [],
-            myMelds: [],
-            myBonusTiles: [],
-          },
-        });
-      }
-    }
-  }
-
-  sendToConnection(conn: Connection, message: ServerMessage) {
-    conn.send(JSON.stringify(message));
-  }
-
-  checkForDraw(): boolean {
-    if (this.state.phase === 'finished' && this.state.turnPhase === 'game_over' && this.lastWinner === undefined) {
-      // Wall exhausted - broadcast draw
-      for (const c of this.getConnections()) {
-        this.sendToConnection(c, {
-          type: "GAME_OVER",
-          winner: -1,
-          scores: { 0: 0, 1: 0, 2: 0, 3: 0 }, // No score changes
-          breakdown: { fan: 0, items: [], basePoints: 0, totalPoints: 0 },
-          winnerName: '',
-          winningHand: [],
-          winningMelds: [],
-          isSelfDrawn: false,
-        });
-      }
-      return true;
-    }
-    return false;
-  }
-
-  sendError(conn: Connection, message: string) {
-    this.sendToConnection(conn, { type: "ERROR", message });
+  private broadcastDraw() {
+    broadcastGameOver(this.broadcastCtx, this.state, -1, { fan: 0, items: [], basePoints: 0, totalPoints: 0 }, false);
   }
 }
 
-// Env type for Cloudflare Workers
 interface Env {
   MahjongRoom: DurableObjectNamespace;
 }
 
-// Worker fetch handler
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     return (

@@ -1,6 +1,6 @@
 // party/bot.test.ts
 import { describe, it, expect } from 'vitest';
-import { BotPlayer } from './bot';
+import { BotPlayer } from './bot/bot';
 import type { GameState, TileInstance, Seat, Player } from '../src/game/types';
 
 // Helper to create minimal game state
